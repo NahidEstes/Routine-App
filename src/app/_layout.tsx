@@ -1,12 +1,12 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { DemoProvider } from "../state/DemoProvider";
+import { TrackerProvider } from "../state/TrackerProvider";
 import { colors } from "../theme";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <DemoProvider>
+      <TrackerProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -16,10 +16,11 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="habit" />
+          <Stack.Screen name="habits" />
           <Stack.Screen name="routines" />
           <Stack.Screen name="routine" />
         </Stack>
-      </DemoProvider>
+      </TrackerProvider>
     </SafeAreaProvider>
   );
 }

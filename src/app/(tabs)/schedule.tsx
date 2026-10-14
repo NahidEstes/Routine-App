@@ -9,16 +9,17 @@ import {
   Screen,
   Segment,
 } from "../../components/ui";
-import { HabitCard } from "../../components/HabitCard";
+import { HabitCard } from "../../components/EntryCard";
 import { RescheduleModal } from "../../components/RescheduleModal";
-import { useDemo } from "../../state/DemoProvider";
-import { itemsForDate } from "../../state/selectors";
+import { useTracker } from "../../state/TrackerProvider";
+import { itemsForDate } from "../../domain/progress";
 import type { ScheduledItem } from "../../models/types";
 import { formatTime, longDate, weekDates } from "../../utils/dates";
 import { colors, ui } from "../../theme";
+import { WeeklyGoals } from "../../components/WeeklyGoals";
 
 export default function Schedule() {
-  const { state, selectedDate, setSelectedDate } = useDemo();
+  const { state, selectedDate, setSelectedDate } = useTracker();
   const [view, setView] = useState<"day" | "week">("day");
   const [reschedule, setReschedule] = useState<ScheduledItem | null>(null);
   const dates = view === "day" ? [selectedDate] : weekDates(selectedDate);
@@ -35,7 +36,7 @@ export default function Schedule() {
         onChange={setView}
       />
       {dates.map((date) => {
-        const items = itemsForDate(state, date);
+        const items = itemsForDate(state, date).filter((i) => !i.weekly);
         const slots = [
           ...new Set([
             ...Array.from(
@@ -148,6 +149,7 @@ export default function Schedule() {
           </View>
         );
       })}
+      <WeeklyGoals date={selectedDate} onReschedule={setReschedule} />
       <Button
         label="Schedule a habit"
         icon="add"

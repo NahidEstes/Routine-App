@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ScheduledItem } from "../models/types";
-import { useDemo } from "../state/DemoProvider";
+import { useTracker } from "../state/TrackerProvider";
 import { formatTime, validDate, validTime } from "../utils/dates";
 import { colors, ui } from "../theme";
 import {
@@ -40,19 +40,29 @@ function RescheduleSheet({
   item: ScheduledItem;
   onClose: () => void;
 }) {
-  const { dispatch } = useDemo();
+  const { dispatch, saving, error: saveError } = useTracker();
   const insets = useSafeAreaInsets();
   const [date, setDate] = useState(item.date);
   const [time, setTime] = useState(item.time ?? "09:00");
   const [scope, setScope] = useState<"once" | "future">("once");
   const [error, setError] = useState("");
-  function save() {
+  async function save() {
     if (!validDate(date) || !validTime(time)) {
       setError("Enter a valid date (YYYY-MM-DD) and time (HH:MM).");
       return;
     }
-    dispatch({ type: "reschedule", id: item.id, date, time, scope });
-    onClose();
+    if (
+      await dispatch({
+        type: "reschedule",
+        id: item.id,
+        habitId: item.habitId,
+        sourceDate: item.date,
+        date,
+        time,
+        scope,
+      })
+    )
+      onClose();
   }
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
@@ -130,14 +140,19 @@ function RescheduleSheet({
             <Text style={ui.small}>
               {scope === "once"
                 ? "Moves this selected occurrence only."
-                : "Moves this occurrence and changes the time of later demo entries. Repeat days stay the same."}
+                : "Changes this and future schedules. Chosen weekdays shift by the day difference; earlier history stays unchanged."}
             </Text>
-            {!!error && (
+            {!!(error || saveError) && (
               <Text accessibilityRole="alert" style={ui.error}>
-                {error}
+                {error || saveError}
               </Text>
             )}
-            <Button label="Reschedule" icon="time-outline" onPress={save} />
+            <Button
+              label="Reschedule"
+              icon="time-outline"
+              disabled={saving}
+              onPress={save}
+            />
             <Button label="Cancel" onPress={onClose} secondary />
           </ScrollView>
         </View>

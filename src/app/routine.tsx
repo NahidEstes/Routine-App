@@ -1,5 +1,5 @@
 import { clone } from "../utils/clone";
-import { demoId } from "../utils/id";
+import { createId } from "../utils/id";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -16,20 +16,21 @@ import {
   Segment,
   TimeField,
 } from "../components/ui";
-import { useDemo } from "../state/DemoProvider";
+import { useTracker } from "../state/TrackerProvider";
 import type { Routine, RoutineStep } from "../models/types";
 import { DAY_NAMES, formatTime, validTime } from "../utils/dates";
 import { colors, ui } from "../theme";
 
 export default function RoutineScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { state, dispatch } = useDemo();
+  const { state, dispatch, selectedDate, saving, today } = useTracker();
+  const [sessionDate] = useState(selectedDate);
   const existing = state.routines.find((r) => r.id === id);
   const [draft, setDraft] = useState<Routine>(() =>
     existing
       ? clone(existing)
       : {
-          id: demoId("routine"),
+          id: createId("routine"),
           name: "",
           subtitle: "A fresh start",
           time: "07:00",
@@ -42,32 +43,43 @@ export default function RoutineScreen() {
   const [step, setStep] = useState<RoutineStep | null>(null);
   const [stepMinutes, setStepMinutes] = useState("5");
   const [stepBusyMinutes, setStepBusyMinutes] = useState("1");
-  const [running, setRunning] = useState(false);
-  const [completed, setCompleted] = useState<string[]>([]);
+  const session = state.sessions.find(
+    (s) => s.routineId === draft.id && s.date === sessionDate && !s.ended,
+  );
+  const running = !!session && !session.ended;
+  const completed = session?.completed ?? [];
+  const activeMode = running ? (session!.busy ? "busy" : "full") : mode;
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const routine = editing
     ? draft
-    : (state.routines.find((r) => r.id === draft.id) ?? draft);
+    : {
+        ...(state.routines.find((r) => r.id === draft.id) ?? draft),
+        ...(running ? { steps: session!.steps } : {}),
+      };
   const duration = routine.steps.reduce(
-    (sum, s) => sum + (mode === "full" ? s.minutes : s.busyMinutes),
+    (sum, s) => sum + (activeMode === "full" ? s.minutes : s.busyMinutes),
     0,
   );
-  function saveRoutine() {
+  async function saveRoutine() {
     if (!draft.name.trim() || !draft.days.length || !validTime(draft.time)) {
       setError("Add a name, valid time and at least one day.");
       return;
     }
-    dispatch({
-      type: "saveRoutine",
-      routine: { ...draft, name: draft.name.trim() },
-    });
+    if (
+      !(await dispatch({
+        type: "saveRoutine",
+        routine: { ...draft, name: draft.name.trim() },
+      }))
+    )
+      return;
     setEditing(false);
     setError("");
+    if (!id) router.setParams({ id: draft.id });
   }
   function openStep(value?: RoutineStep) {
     const next = value ?? {
-      id: demoId("step"),
+      id: createId("step"),
       name: "",
       icon: "leaf-outline" as const,
       minutes: 5,
@@ -78,7 +90,7 @@ export default function RoutineScreen() {
     setStepBusyMinutes(String(next.busyMinutes));
     setError("");
   }
-  function saveStep() {
+  async function saveStep() {
     if (!step) return;
     const minutes = Number(stepMinutes),
       busyMinutes = Number(stepBusyMinutes);
@@ -102,19 +114,25 @@ export default function RoutineScreen() {
         ? routine.steps.map((s) => (s.id === step.id ? next : s))
         : [...routine.steps, next],
     };
+    if (
+      !editing &&
+      !(await dispatch({ type: "saveRoutine", routine: updated }))
+    )
+      return;
     setDraft(updated);
-    if (!editing) dispatch({ type: "saveRoutine", routine: updated });
     setStep(null);
     setError("");
-    setRunning(false);
-    setCompleted([]);
   }
-  function moveStep(index: number, delta: number) {
+  async function moveStep(index: number, delta: number) {
     const steps = [...routine.steps];
     [steps[index], steps[index + delta]] = [steps[index + delta], steps[index]];
     const updated = { ...routine, steps };
+    if (
+      !editing &&
+      !(await dispatch({ type: "saveRoutine", routine: updated }))
+    )
+      return;
     setDraft(updated);
-    if (!editing) dispatch({ type: "saveRoutine", routine: updated });
   }
   if (id && !existing)
     return (
@@ -209,18 +227,22 @@ export default function RoutineScreen() {
           </View>
         </View>
       )}
-      <Segment
-        options={[
-          { value: "full", label: "Full routine" },
-          { value: "busy", label: "Busy day" },
-        ]}
-        value={mode}
-        onChange={(value) => {
-          setMode(value);
-          setRunning(false);
-          setCompleted([]);
-        }}
-      />
+      <Text style={ui.small}>
+        Routine date: {sessionDate}
+        {running ? " · Session saved; you can leave and resume" : ""}
+      </Text>
+      {!running && (
+        <Segment
+          options={[
+            { value: "full", label: "Full routine" },
+            { value: "busy", label: "Busy day" },
+          ]}
+          value={mode}
+          onChange={(value) => {
+            setMode(value);
+          }}
+        />
+      )}
       <View style={ui.between}>
         <Text style={ui.heading}>Your steps</Text>
         <Text style={ui.small}>{duration} min total</Text>
@@ -259,7 +281,8 @@ export default function RoutineScreen() {
                 <Text
                   style={{ color: colors.amber, fontSize: 13, marginTop: 4 }}
                 >
-                  {mode === "full" ? s.minutes : s.busyMinutes} min
+                  {activeMode === "full" ? s.minutes : s.busyMinutes} min
+                  {s.habitId ? " · Linked habit goal" : ""}
                 </Text>
               </Pressable>
               {running && (
@@ -309,6 +332,42 @@ export default function RoutineScreen() {
             onChangeText={(name) => setStep({ ...step, name })}
             maxLength={60}
           />
+          <Text style={ui.label}>Link an existing habit (optional)</Text>
+          <View style={[ui.row, { flexWrap: "wrap" }]}>
+            <Chip
+              label="Standalone step"
+              selected={!step.habitId}
+              onPress={() => setStep({ ...step, habitId: undefined })}
+            />
+            {state.habits
+              .filter((h) => !h.archivedAt)
+              .map((h) => (
+                <Chip
+                  key={h.id}
+                  label={h.name}
+                  selected={step.habitId === h.id}
+                  onPress={() => {
+                    setStep({
+                      ...step,
+                      habitId: h.id,
+                      name: h.name,
+                      icon: h.icon,
+                    });
+                    if (h.goal.type === "duration") {
+                      setStepMinutes(String(h.goal.value));
+                      setStepBusyMinutes(String(h.busyGoal ?? h.goal.value));
+                    }
+                  }}
+                />
+              ))}
+          </View>
+          {!!step.habitId && (
+            <Text style={ui.small}>
+              Completion meets the linked habit’s goal for this routine date.
+              Today and Routine share one record; repeating the action adds no
+              extra credit.
+            </Text>
+          )}
           <Field
             label="Full duration (minutes)"
             value={stepMinutes}
@@ -342,14 +401,17 @@ export default function RoutineScreen() {
               label="Remove step"
               danger
               secondary
-              onPress={() => {
+              onPress={async () => {
                 const updated = {
                   ...routine,
                   steps: routine.steps.filter((s) => s.id !== step.id),
                 };
+                if (
+                  !editing &&
+                  !(await dispatch({ type: "saveRoutine", routine: updated }))
+                )
+                  return;
                 setDraft(updated);
-                if (!editing)
-                  dispatch({ type: "saveRoutine", routine: updated });
                 setStep(null);
               }}
             />
@@ -373,7 +435,7 @@ export default function RoutineScreen() {
         <>
           <Button
             label="Save routine"
-            disabled={!!step}
+            disabled={!!step || saving}
             onPress={saveRoutine}
           />
           {existing && (
@@ -404,9 +466,14 @@ export default function RoutineScreen() {
           {completed.length < routine.steps.length && (
             <Button
               label="Complete this step"
-              onPress={() =>
-                setCompleted([...completed, routine.steps[completed.length].id])
-              }
+              disabled={saving}
+              onPress={() => {
+                void dispatch({
+                  type: "completeStep",
+                  sessionId: session!.id,
+                  stepId: routine.steps[completed.length].id,
+                });
+              }}
             />
           )}
           <Button
@@ -416,23 +483,34 @@ export default function RoutineScreen() {
                 : "End session"
             }
             secondary
+            disabled={saving}
             onPress={() => {
-              setRunning(false);
-              setCompleted([]);
+              void dispatch({ type: "endRoutine", sessionId: session!.id });
             }}
           />
           <Text style={ui.small}>
-            Demo walkthrough · No timer or habit completion is recorded.
+            Manual step completion ·{" "}
+            {session?.busy ? "Busy goals" : "Full goals"} · Saved offline
           </Text>
         </View>
       ) : (
         <Button
           label="Start routine"
           icon="play-outline"
-          disabled={!routine.steps.length || !!step}
+          disabled={
+            !routine.steps.length ||
+            !!step ||
+            saving ||
+            !!routine.archivedAt ||
+            sessionDate > today
+          }
           onPress={() => {
-            setRunning(true);
-            setCompleted([]);
+            void dispatch({
+              type: "startRoutine",
+              id: routine.id,
+              date: sessionDate,
+              busy: mode === "busy",
+            });
           }}
         />
       )}
@@ -440,12 +518,17 @@ export default function RoutineScreen() {
         !running &&
         (confirmDelete ? (
           <View style={ui.card}>
-            <Text style={ui.body}>Remove this routine from the demo?</Text>
+            <Text style={ui.body}>
+              Archive this routine? Saved sessions remain in history.
+            </Text>
             <Button
-              label="Delete routine"
+              label="Confirm archive"
               danger
-              onPress={() => {
-                dispatch({ type: "deleteRoutine", id: existing.id });
+              onPress={async () => {
+                if (
+                  !(await dispatch({ type: "deleteRoutine", id: existing.id }))
+                )
+                  return;
                 if (router.canGoBack()) router.back();
                 else router.replace("/routines");
               }}
@@ -458,7 +541,7 @@ export default function RoutineScreen() {
           </View>
         ) : (
           <Button
-            label="Delete routine"
+            label="Archive routine"
             danger
             secondary
             onPress={() => setConfirmDelete(true)}

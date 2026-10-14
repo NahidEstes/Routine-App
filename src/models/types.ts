@@ -29,6 +29,7 @@ export interface Habit {
   time: string | null;
   busyGoal: number | null;
   createdAt: DateKey;
+  archivedAt?: DateKey;
 }
 export type Status = "pending" | "done" | "skipped";
 export interface Occurrence {
@@ -44,6 +45,7 @@ export interface RoutineStep {
   icon: HabitIcon;
   minutes: number;
   busyMinutes: number;
+  habitId?: string;
 }
 export interface Routine {
   id: string;
@@ -52,10 +54,53 @@ export interface Routine {
   time: string;
   days: number[];
   steps: RoutineStep[];
+  archivedAt?: DateKey;
 }
-export interface DemoState {
+export interface HabitVersion {
+  id: string;
+  habitId: string;
+  effectiveFrom: DateKey;
+  startDate: DateKey;
+  habit: Habit;
+}
+export interface Entry extends Occurrence {
+  sourceDate: DateKey;
+  snapshot: Habit;
+  amount: number;
+  busy: boolean;
+  target: number;
+  excluded: boolean;
+  rescheduled: boolean;
+  weekly: boolean;
+}
+export interface WeeklyPlan {
+  id: string;
+  habitId: string;
+  week: DateKey;
+  target: number;
+  snapshot: Habit;
+}
+export interface RoutineSession {
+  id: string;
+  routineId: string;
+  name?: string;
+  date: DateKey;
+  busy: boolean;
+  steps: RoutineStep[];
+  completed: string[];
+  ended: boolean;
+}
+export interface TrackerState {
   habits: Habit[];
-  occurrences: Occurrence[];
+  versions: HabitVersion[];
+  occurrences: Entry[];
   routines: Routine[];
+  weeklyPlans: WeeklyPlan[];
+  sessions: RoutineSession[];
+  busyDates: string[];
 }
-export type ScheduledItem = Occurrence & { habit: Habit };
+export type ScheduledItem = Entry & {
+  habit: Habit;
+  optional?: boolean;
+  displayStatus: Status | "missed";
+};

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { demoId } from "../utils/id";
+import { createId } from "../utils/id";
 import { Switch, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -13,10 +13,10 @@ import {
   Segment,
   TimeField,
 } from "../components/ui";
-import { useDemo } from "../state/DemoProvider";
+import { useTracker } from "../state/TrackerProvider";
 import type { Category, Goal, Habit, HabitIcon, Repeat } from "../models/types";
 import { colors, ui } from "../theme";
-import { DAY_NAMES, validTime } from "../utils/dates";
+import { DAY_NAMES, validTime, validDate } from "../utils/dates";
 
 const icons: HabitIcon[] = [
   "water-outline",
@@ -36,7 +36,7 @@ const categories: Category[] = [
 ];
 export default function HabitScreen() {
   const params = useLocalSearchParams<{ id?: string; scheduled?: string }>();
-  const { state, dispatch, selectedDate } = useDemo();
+  const { state, dispatch, selectedDate, today, saving } = useTracker();
   const existing = state.habits.find((h) => h.id === params.id);
   const [name, setName] = useState(existing?.name ?? "");
   const [icon, setIcon] = useState<HabitIcon>(existing?.icon ?? "book-outline");
@@ -69,7 +69,14 @@ export default function HabitScreen() {
   const [busyAmount, setBusyAmount] = useState(String(existing?.busyGoal ?? 5));
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  function save() {
+  const [startDate, setStartDate] = useState(
+    existing?.createdAt ?? (selectedDate >= today ? selectedDate : today),
+  );
+  async function save() {
+    if (!validDate(startDate)) {
+      setError("Enter a valid start date (YYYY-MM-DD).");
+      return;
+    }
     const value = goalType === "boolean" ? 1 : Number(amount);
     const busyValue = goalType === "boolean" ? 1 : Number(busyAmount);
     if (!name.trim()) {
@@ -118,7 +125,7 @@ export default function HabitScreen() {
       return;
     }
     const habit: Habit = {
-      id: existing?.id ?? demoId("habit"),
+      id: existing?.id ?? createId("habit"),
       name: name.trim(),
       icon,
       category,
@@ -147,9 +154,9 @@ export default function HabitScreen() {
       },
       time: schedule === "time" ? time : null,
       busyGoal: busyEnabled ? busyValue : null,
-      createdAt: existing?.createdAt ?? selectedDate,
+      createdAt: existing?.createdAt ?? startDate,
     };
-    dispatch({ type: "saveHabit", habit });
+    if (!(await dispatch({ type: "saveHabit", habit }))) return;
     if (router.canGoBack()) router.back();
     else router.replace("/");
   }
@@ -159,7 +166,7 @@ export default function HabitScreen() {
         <Header back title="Habit" />
         <EmptyState
           title="Habit unavailable"
-          message="This habit has been removed from the demo."
+          message="This habit is unavailable."
         />
       </Screen>
     );
@@ -198,6 +205,14 @@ export default function HabitScreen() {
         maxLength={60}
         placeholder="Read a book"
       />
+      {!existing && (
+        <Field
+          label="Start date (YYYY-MM-DD)"
+          value={startDate}
+          onChangeText={setStartDate}
+          maxLength={10}
+        />
+      )}
       <View style={{ gap: 10 }}>
         <Text style={ui.label}>Category</Text>
         <View style={[ui.row, { flexWrap: "wrap" }]}>
@@ -262,7 +277,10 @@ export default function HabitScreen() {
             { value: "weekly", label: "Weekly goal" },
           ]}
           value={repeat}
-          onChange={setRepeat}
+          onChange={(value) => {
+            setRepeat(value);
+            if (value === "daily") setDays([0, 1, 2, 3, 4, 5, 6]);
+          }}
         />
         {repeat !== "weekly" ? (
           <View
@@ -299,8 +317,8 @@ export default function HabitScreen() {
               maxLength={1}
             />
             <Text style={ui.small}>
-              Demo: available every day with a weekly target. Automatic target
-              scheduling comes in a later phase.
+              Choose any days to meet your weekly target. These are optional
+              opportunities, not daily obligations.
             </Text>
           </>
         )}
@@ -351,17 +369,22 @@ export default function HabitScreen() {
       )}
       <Button
         label={existing ? "Save changes" : "Create habit"}
+        disabled={saving || !!existing?.archivedAt}
         onPress={save}
       />
       {existing &&
         (confirmDelete ? (
           <View style={ui.card}>
-            <Text style={ui.body}>Remove this habit and its demo history?</Text>
+            <Text style={ui.body}>
+              Archive this habit? History is kept. Future tasks stop after
+              today.
+            </Text>
             <Button
-              label="Delete habit"
+              label="Confirm archive"
               danger
-              onPress={() => {
-                dispatch({ type: "deleteHabit", id: existing.id });
+              onPress={async () => {
+                if (!(await dispatch({ type: "deleteHabit", id: existing.id })))
+                  return;
                 if (router.canGoBack()) router.back();
                 else router.replace("/");
               }}
@@ -374,15 +397,16 @@ export default function HabitScreen() {
           </View>
         ) : (
           <Button
-            label="Delete habit"
+            label="Archive habit"
             danger
             secondary
             onPress={() => setConfirmDelete(true)}
           />
         ))}
       <Text style={ui.small}>
-        Session-only demo. Editing a habit rebuilds its October slots using
-        these fields.
+        {existing
+          ? "Edits apply tomorrow; weekly rule or target changes apply next Monday. Past records keep their original name and goal."
+          : "Saved on this device. No account or internet connection needed."}
       </Text>
     </Screen>
   );

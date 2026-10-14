@@ -11,20 +11,27 @@ import {
   ProgressRing,
   Screen,
 } from "../../components/ui";
-import { HabitCard } from "../../components/HabitCard";
+import { HabitCard } from "../../components/EntryCard";
 import { RescheduleModal } from "../../components/RescheduleModal";
-import { useDemo } from "../../state/DemoProvider";
-import { completion, itemsForDate } from "../../state/selectors";
+import { useTracker } from "../../state/TrackerProvider";
+import { completion, itemsForDate } from "../../domain/progress";
 import type { ScheduledItem } from "../../models/types";
-import { DEMO_TODAY, longDate } from "../../utils/dates";
+import { longDate } from "../../utils/dates";
+import { WeeklyGoals } from "../../components/WeeklyGoals";
 import { colors, ui } from "../../theme";
 
 export default function Today() {
-  const { state, selectedDate, setSelectedDate, busy, setBusy } = useDemo();
+  const { state, selectedDate, setSelectedDate, busy, setBusy, today } =
+    useTracker();
   const [reschedule, setReschedule] = useState<ScheduledItem | null>(null);
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const items = itemsForDate(state, selectedDate);
-  const stats = completion(state, [selectedDate]);
+  const items = itemsForDate(state, selectedDate, today).filter(
+    (i) => !i.weekly,
+  );
+  const stats = {
+    ...completion(state, [selectedDate]),
+    ...(selectedDate > today ? { total: items.length } : {}),
+  };
   const groups = [
     {
       title: "Morning",
@@ -64,22 +71,25 @@ export default function Today() {
         }
       />
       <DateStrip value={selectedDate} onChange={setSelectedDate} />
-      {selectedDate !== DEMO_TODAY && (
+      {selectedDate !== today && (
         <Button
           label="Back to today"
           secondary
-          onPress={() => setSelectedDate(DEMO_TODAY)}
+          onPress={() => setSelectedDate(today)}
         />
       )}
       <View style={[ui.sageCard, ui.between]}>
         <View style={ui.grow}>
           <Text style={ui.heading}>Small steps, steady progress</Text>
           <Text style={[ui.subtitle, { marginTop: 6 }]}>
-            {stats.done} of {stats.total} completed
+            {stats.done} of {stats.total} daily tasks completed
           </Text>
           <Text style={ui.small}>
             {items.filter((i) => i.status === "skipped").length} skipped ·{" "}
-            {items.filter((i) => i.status === "pending").length} remaining
+            {items.filter((i) => i.displayStatus === "pending").length}{" "}
+            remaining
+            {" · "}
+            {stats.missed} missed · {stats.busy} busy goals
           </Text>
         </View>
         <ProgressRing percent={stats.percent} />
@@ -109,7 +119,7 @@ export default function Today() {
       {!items.length ? (
         <EmptyState
           title="A little breathing room"
-          message="No habits planned for this day. Add one or choose another date."
+          message="No daily tasks planned for this day. Add one or choose another date."
           action="Add a habit"
           onPress={() => router.push("/habit")}
         />
@@ -174,7 +184,8 @@ export default function Today() {
           <View style={ui.grow}>
             <Text style={ui.heading}>Your routines</Text>
             <Text style={ui.small}>
-              {state.routines.length} mindful ways to start and unwind
+              {state.routines.filter((r) => !r.archivedAt).length} mindful ways
+              to start and unwind
             </Text>
           </View>
         </View>
@@ -185,8 +196,14 @@ export default function Today() {
         icon="add"
         onPress={() => router.push("/habit")}
       />
+      <WeeklyGoals date={selectedDate} onReschedule={setReschedule} />
+      <Button
+        label="Manage habits & archive"
+        secondary
+        onPress={() => router.push("/habits")}
+      />
       <Text style={[ui.small, { textAlign: "center" }]}>
-        DEMO · October 2026 · Changes last for this session
+        Saved locally · Works offline
       </Text>
       <RescheduleModal item={reschedule} onClose={() => setReschedule(null)} />
     </Screen>

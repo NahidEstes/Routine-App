@@ -1,6 +1,21 @@
 import type { DateKey } from "../models/types";
 
-export const DEMO_TODAY = "2026-10-14";
+export function localToday() {
+  return dateKey(new Date());
+}
+export function datesBetween(start: string, end: string) {
+  const dates: string[] = [];
+  for (let date = start; date <= end; date = addDays(date, 1)) dates.push(date);
+  return dates;
+}
+export function daysApart(start: string, end: string): number {
+  // Calendar ordinals only; user-facing dates are always formatted locally.
+  const ordinal = (key: string) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return Date.UTC(y, m - 1, d) / 86400000;
+  };
+  return ordinal(end) - ordinal(start);
+}
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function parseDate(key: DateKey) {
   return new Date(`${key}T12:00:00`);

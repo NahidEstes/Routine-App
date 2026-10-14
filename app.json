@@ -6,8 +6,15 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "platforms": ["android", "web"],
-    "plugins": ["expo-router", "expo-font"],
+    "platforms": [
+      "android",
+      "web"
+    ],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-sqlite"
+    ],
     "android": {
       "package": "com.nahid.steadyroutine",
       "permissions": [],
