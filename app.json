@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Steady · Daily Routine",
+    "slug": "steady-routine",
+    "scheme": "steady-routine",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": ["android", "web"],
+    "plugins": ["expo-router", "expo-font"],
+    "android": {
+      "package": "com.nahid.steadyroutine",
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
