@@ -16,7 +16,12 @@ export function openRepository() {
         transaction: (task) => db.withTransactionAsync(() => task(db)),
       };
       const result = new TrackerRepository(adapter);
-      await result.initialize();
+      try {
+        await result.initialize();
+      } catch (error) {
+        await db.closeAsync();
+        throw error;
+      }
       return result;
     })().catch((error) => {
       repository = undefined;

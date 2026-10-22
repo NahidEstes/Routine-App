@@ -14,9 +14,11 @@ import {
   weekDates,
 } from "../utils/dates";
 import { clone } from "../utils/clone";
+import { defaultFeatures, isPaused } from "./organization";
 
 export function emptyState(): TrackerState {
   return {
+    features: defaultFeatures(),
     habits: [],
     versions: [],
     occurrences: [],
@@ -24,6 +26,7 @@ export function emptyState(): TrackerState {
     weeklyPlans: [],
     sessions: [],
     busyDates: [],
+    notes: [],
   };
 }
 export function versionAt(
@@ -82,19 +85,30 @@ export function weeklyPlan(
   week: string,
 ): WeeklyPlan | undefined {
   const saved = state.weeklyPlans.find((p) => p.id === `${id}:${week}`);
-  if (saved) return saved;
   const eligible = weekDates(week)
     .map((date) => plannedEntry(state, id, date))
     .filter((e): e is Entry => !!e && e.weekly);
-  if (!eligible.length) return;
-  const snapshot = eligible[0].snapshot;
-  return {
+  if (!eligible.length && !saved) return;
+  const snapshot = saved?.snapshot ?? eligible[0].snapshot;
+  const base = saved ?? {
     id: `${id}:${week}`,
     habitId: id,
     week,
     target: Math.min(snapshot.repeat.target, eligible.length),
     snapshot,
   };
+  const activeDays = eligible.filter(
+    (e) => !isPaused(state, id, e.date),
+  ).length;
+  const pausedDays = eligible.length - activeDays;
+  if (!pausedDays) return base;
+  // Freeze the original commitment; derive a rounded-up proportional target.
+  // Recorded credits remain valid even if their date is later paused.
+  const target = Math.max(
+    weeklyCompleted(state, base),
+    Math.ceil((base.target * activeDays) / eligible.length),
+  );
+  return { ...base, target: Math.min(base.target, target) };
 }
 export function weeklyCompleted(state: TrackerState, plan: WeeklyPlan) {
   return new Set(
@@ -130,15 +144,28 @@ export function entriesForDate(
     result.push(planned);
   }
   return result
-    .map((e): ScheduledItem => ({
-      ...e,
-      habit: e.snapshot,
-      optional: e.weekly && !state.occurrences.some((o) => o.id === e.id),
-      displayStatus:
-        e.status === "pending" && date < today && !e.weekly
-          ? "missed"
-          : e.status,
-    }))
+    .filter(
+      (e) =>
+        !isPaused(state, e.habitId, date) ||
+        e.amount > 0 ||
+        e.status !== "pending" ||
+        state.notes.some((n) => n.entryId === e.id),
+    )
+    .map(
+      (e): ScheduledItem => ({
+        ...e,
+        habit: e.snapshot,
+        paused: isPaused(state, e.habitId, date),
+        optional: e.weekly && !state.occurrences.some((o) => o.id === e.id),
+        displayStatus:
+          e.status === "pending" &&
+          date < today &&
+          !e.weekly &&
+          !isPaused(state, e.habitId, date)
+            ? "missed"
+            : e.status,
+      }),
+    )
     .sort((a, b) => (a.time ?? "24:00").localeCompare(b.time ?? "24:00"));
 }
 // Persist historical snapshots before editing rules or advancing the local date.
@@ -149,21 +176,34 @@ export function materialize(state: TrackerState, today: string): TrackerState {
     weeklyPlans: [...state.weeklyPlans],
   };
   const ids = new Set(next.occurrences.map((e) => e.id));
+  const dailyIds = new Set(
+    next.occurrences.filter((e) => !e.weekly).map((e) => e.id),
+  );
+  const occupiedDays = new Set(
+    next.occurrences
+      .filter((e) => !e.excluded)
+      .map((e) => `${e.habitId}:${e.date}`),
+  );
   const plans = new Set(next.weeklyPlans.map((p) => p.id));
   for (const h of state.habits) {
     for (const date of datesBetween(h.createdAt, today)) {
+      if (dailyIds.has(`${h.id}:${date}`)) continue;
       const entry = plannedEntry(next, h.id, date);
       if (!entry) continue;
       if (!entry.weekly && !ids.has(entry.id)) {
-        const occupied = next.occurrences.some(
-          (e) => e.habitId === h.id && e.date === date && !e.excluded,
-        );
+        const occupied = occupiedDays.has(`${h.id}:${date}`);
         next.occurrences.push(occupied ? { ...entry, excluded: true } : entry);
+        if (!occupied) occupiedDays.add(`${h.id}:${date}`);
         ids.add(entry.id);
       }
       if (entry.weekly) {
         const week = weekDates(date)[0];
-        const plan = weeklyPlan(next, h.id, week);
+        // Store the unadjusted commitment; pause adjustments are derived at read time.
+        const plan = weeklyPlan(
+          { ...next, features: { ...next.features, pauses: [] } },
+          h.id,
+          week,
+        );
         if (plan && !plans.has(plan.id)) {
           next.weeklyPlans.push(plan);
           plans.add(plan.id);

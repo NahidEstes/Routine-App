@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,13 +8,16 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import { router } from "expo-router";
-import { colors, ui } from "../theme";
+import { DateTimeField } from "./DateTimeField";
+import { useLocalFeatures } from "../state/LocalFeaturesProvider";
+import { useTheme, classicTheme, premiumTheme, type Palette } from "../theme";
 import {
   addDays,
   DAY_NAMES,
@@ -27,13 +30,14 @@ export type IconName = React.ComponentProps<typeof Ionicons>["name"];
 export function Icon({
   name,
   size = 24,
-  color = colors.green,
+  color,
 }: {
   name: IconName;
   size?: number;
   color?: React.ComponentProps<typeof Ionicons>["color"];
 }) {
-  return <Ionicons name={name} size={size} color={color} />;
+  const { colors } = useTheme();
+  return <Ionicons name={name} size={size} color={color ?? colors.green} />;
 }
 export function IconBubble({
   name,
@@ -44,12 +48,13 @@ export function IconBubble({
   amber?: boolean;
   size?: number;
 }) {
+  const { colors, premium } = useTheme();
   return (
     <View
       style={{
         width: size,
         height: size,
-        borderRadius: size / 2,
+        borderRadius: premium ? size / 2 : 0,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: amber ? colors.amberLight : colors.sage,
@@ -72,34 +77,49 @@ export function Button({
   danger,
 }: {
   label: string;
-  onPress: () => void;
+  onPress: () => void | Promise<unknown>;
   secondary?: boolean;
   icon?: IconName;
   disabled?: boolean;
   danger?: boolean;
 }) {
+  const { colors, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
   const tone = danger ? colors.danger : colors.green;
+  const foreground =
+    premium && !secondary && !danger ? "#FFFFFF" : danger ? tone : colors.text;
+  const pressedLock = useRef(false);
+  const [pending, setPending] = useState(false);
+  const inactive = disabled || pending;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
+      accessibilityState={{ disabled: !!inactive, busy: pending }}
+      disabled={inactive}
+      onPress={async () => {
+        if (pressedLock.current) return;
+        pressedLock.current = true;
+        setPending(true);
+        try {
+          await onPress();
+        } finally {
+          pressedLock.current = false;
+          setPending(false);
+        }
+      }}
       style={({ pressed }) => [
         styles.button,
         {
-          backgroundColor: secondary ? "transparent" : tone,
-          borderColor: tone,
-          opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
+          backgroundColor:
+            secondary || (premium && danger) ? colors.card : colors.button,
+          borderColor: danger ? tone : colors.buttonBorder,
+          opacity: inactive ? 0.45 : pressed ? 0.75 : 1,
         },
       ]}
     >
-      {icon && (
-        <Icon name={icon} color={secondary ? tone : "white"} size={22} />
-      )}
-      <Text style={[styles.buttonText, { color: secondary ? tone : "white" }]}>
-        {label}
-      </Text>
+      {icon && <Icon name={icon} color={foreground} size={22} />}
+      <Text style={[styles.buttonText, { color: foreground }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -108,24 +128,32 @@ export function IconButton({
   label,
   onPress,
   disabled,
+  plain = false,
+  color,
 }: {
   name: IconName;
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  plain?: boolean;
+  color?: string;
 }) {
+  const { colors, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.iconButton,
+        plain && { backgroundColor: "transparent" },
         { opacity: disabled ? 0.3 : pressed ? 0.6 : 1 },
       ]}
     >
-      <Icon name={name} />
+      <Icon name={name} color={color ?? colors.green} />
     </Pressable>
   );
 }
@@ -142,6 +170,8 @@ export function Chip({
   onPress: () => void;
   amber?: boolean;
 }) {
+  const { colors, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
   return (
     <Pressable
       accessibilityRole="button"
@@ -156,7 +186,7 @@ export function Chip({
               ? colors.amberLight
               : colors.green
             : colors.sage,
-          borderColor: selected && amber ? colors.amber : "transparent",
+          borderColor: selected && amber ? colors.amber : colors.border,
         },
       ]}
     >
@@ -181,8 +211,16 @@ export function Segment<T extends string>({
   value: T;
   onChange: (value: T) => void;
 }) {
+  const { colors, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
+  const { fontScale, width } = useWindowDimensions();
   return (
-    <View style={styles.segment}>
+    <View
+      style={[
+        styles.segment,
+        fontScale > 1.3 && width < 450 && { flexDirection: "column" },
+      ]}
+    >
       {options.map((option) => (
         <Pressable
           key={option.value}
@@ -213,21 +251,35 @@ export function Segment<T extends string>({
 export function Screen({
   children,
   form = false,
-}: React.PropsWithChildren<{ form?: boolean }>) {
+  scrollRef,
+  compact = false,
+}: React.PropsWithChildren<{
+  form?: boolean;
+  scrollRef?: React.Ref<ScrollView>;
+  compact?: boolean;
+}>) {
+  const { colors, premium } = useTheme();
+  const { timer } = useLocalFeatures();
+  const styles = premium ? premiumStyles : classicStyles;
   return (
     <SafeAreaView
       edges={["top", "left", "right", "bottom"]}
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1, backgroundColor: colors.toolbar }}
     >
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: colors.background }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         enabled={form}
       >
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            compact && { gap: 14 },
+            timer && { paddingBottom: 150 },
+          ]}
         >
           {children}
         </ScrollView>
@@ -239,47 +291,74 @@ export function Header({
   title,
   subtitle,
   back = false,
+  backDisabled = false,
   action,
+  onBack,
 }: {
   title: string;
   subtitle?: string;
   back?: boolean;
+  backDisabled?: boolean;
   action?: React.ReactNode;
+  onBack?: () => void;
 }) {
+  const { colors, ui, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
   return (
-    <View style={{ gap: 6 }}>
+    <View style={styles.header}>
       {back ? (
         <View style={ui.between}>
           <IconButton
             name="chevron-back"
             label="Go back"
-            onPress={() =>
-              router.canGoBack() ? router.back() : router.replace("/")
+            disabled={backDisabled}
+            plain
+            color={colors.toolbarText}
+            onPress={
+              onBack ??
+              (() => (router.canGoBack() ? router.back() : router.replace("/")))
             }
           />
-          <Text style={[ui.heading, ui.grow, { textAlign: "center" }]}>
+          <Text
+            accessibilityRole="header"
+            style={[ui.heading, ui.grow, { color: colors.toolbarText }]}
+          >
             {title}
           </Text>
-          {action ?? <View style={{ width: 44 }} />}
+          {action ?? <View style={{ width: 48 }} />}
         </View>
       ) : (
         <View style={ui.between}>
-          <Text style={[ui.title, ui.grow]}>{title}</Text>
+          <Text
+            accessibilityRole="header"
+            style={[ui.title, ui.grow, { color: colors.toolbarText }]}
+          >
+            {title}
+          </Text>
           {action}
         </View>
       )}
-      {!!subtitle && <Text style={ui.subtitle}>{subtitle}</Text>}
+      {!!subtitle && (
+        <Text style={[ui.subtitle, { color: colors.tabInactive }]}>
+          {subtitle}
+        </Text>
+      )}
     </View>
   );
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
+export function Field({
+  label,
+  style,
+  ...props
+}: TextInputProps & { label: string }) {
+  const { colors, ui } = useTheme();
   return (
     <View style={{ gap: 8 }}>
       <Text style={ui.label}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={colors.muted}
-        style={ui.input}
+        style={[ui.input, style]}
         {...props}
       />
     </View>
@@ -296,6 +375,7 @@ export function EmptyState({
   action?: string;
   onPress?: () => void;
 }) {
+  const { ui } = useTheme();
   return (
     <View style={[ui.card, { alignItems: "center", paddingVertical: 32 }]}>
       <IconBubble name="leaf-outline" />
@@ -314,77 +394,129 @@ export function ProgressRing({
   percent: number;
   size?: number;
 }) {
-  const radius = 32;
-  const circumference = 2 * Math.PI * radius;
+  const { colors, ui, premium } = useTheme();
+  const safePercent = Math.min(100, Math.max(0, percent));
+  if (premium) {
+    const radius = (size - 10) / 2;
+    const circumference = 2 * Math.PI * radius;
+    return (
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel={`${safePercent}% completed`}
+        accessibilityValue={{ min: 0, max: 100, now: safePercent }}
+        style={{
+          width: size,
+          height: size,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Svg width={size} height={size} style={{ position: "absolute" }}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={colors.track}
+            strokeWidth={8}
+            fill="none"
+          />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={colors.green}
+            strokeWidth={8}
+            fill="none"
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={circumference * (1 - safePercent / 100)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        </Svg>
+        <Text style={ui.heading}>{safePercent}%</Text>
+      </View>
+    );
+  }
   return (
     <View
+      accessibilityRole="progressbar"
       accessibilityLabel={`${percent}% completed`}
+      accessibilityValue={{ min: 0, max: 100, now: percent }}
       style={{
         width: size,
-        height: size,
+        minHeight: 48,
+        gap: 6,
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Svg
-        width={size}
-        height={size}
-        viewBox="0 0 80 80"
-        style={StyleSheet.absoluteFill}
-      >
-        <Circle
-          cx="40"
-          cy="40"
-          r={radius}
-          stroke="#CDD8CA"
-          strokeWidth="7"
-          fill="none"
+      <Text style={ui.heading}>{percent}%</Text>
+      <View style={{ height: 8, width: "100%", backgroundColor: colors.track }}>
+        <View
+          style={{
+            height: 8,
+            width: `${Math.min(100, Math.max(0, percent))}%`,
+            backgroundColor: colors.green,
+          }}
         />
-        <Circle
-          cx="40"
-          cy="40"
-          r={radius}
-          stroke={colors.green}
-          strokeWidth="7"
-          fill="none"
-          strokeDasharray={`${circumference}`}
-          strokeDashoffset={circumference * (1 - percent / 100)}
-          strokeLinecap="round"
-          transform="rotate(-90 40 40)"
-        />
-      </Svg>
-      <Text style={[ui.heading, { fontSize: size > 80 ? 24 : 18 }]}>
-        {percent}%
-      </Text>
+      </View>
     </View>
   );
 }
 export function DateStrip({
   value,
   onChange,
+  compact = false,
+  hideWeekNavigation = false,
 }: {
   value: string;
   onChange: (date: string) => void;
+  compact?: boolean;
+  hideWeekNavigation?: boolean;
 }) {
+  const { colors, ui, premium } = useTheme();
+  const styles = premium ? premiumStyles : classicStyles;
   const days = weekDates(value);
+  const { fontScale } = useWindowDimensions();
+  const strip = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (weekDates(value).indexOf(value) >= 5)
+      strip.current?.scrollToEnd({ animated: false });
+    else strip.current?.scrollTo({ x: 0, animated: false });
+  }, [value]);
+  const keepSelectedVisible = () => {
+    if (days.indexOf(value) >= 5)
+      strip.current?.scrollToEnd({ animated: false });
+    else strip.current?.scrollTo({ x: 0, animated: false });
+  };
   return (
     <View style={{ gap: 10 }}>
-      <View style={ui.between}>
-        <IconButton
-          name="chevron-back"
-          label="Previous week"
-          onPress={() => onChange(addDays(value, -7))}
-        />
-        <Text style={ui.label}>
-          {shortDate(days[0])} – {shortDate(days[6])}
-        </Text>
-        <IconButton
-          name="chevron-forward"
-          label="Next week"
-          onPress={() => onChange(addDays(value, 7))}
-        />
-      </View>
-      <View style={{ flexDirection: "row", gap: 4 }}>
+      {!hideWeekNavigation && (
+        <View style={ui.between}>
+          <IconButton
+            name="chevron-back"
+            label="Previous week"
+            plain={compact}
+            onPress={() => onChange(addDays(value, -7))}
+          />
+          <Text style={[ui.label, ui.grow, { textAlign: "center" }]}>
+            {shortDate(days[0])} – {shortDate(days[6])}
+          </Text>
+          <IconButton
+            name="chevron-forward"
+            label="Next week"
+            plain={compact}
+            onPress={() => onChange(addDays(value, 7))}
+          />
+        </View>
+      )}
+      <ScrollView
+        ref={strip}
+        onContentSizeChange={keepSelectedVisible}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1, gap: 4 }}
+      >
         {days.map((day) => (
           <Pressable
             key={day}
@@ -394,7 +526,15 @@ export function DateStrip({
             onPress={() => onChange(day)}
             style={[
               styles.date,
-              { backgroundColor: day === value ? colors.green : "#F0F0E9" },
+              { minWidth: Math.max(48, 36 * fontScale), paddingVertical: 8 },
+              {
+                backgroundColor:
+                  day === value
+                    ? colors.green
+                    : compact
+                      ? "transparent"
+                      : colors.card,
+              },
             ]}
           >
             <Text
@@ -416,7 +556,7 @@ export function DateStrip({
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -428,86 +568,89 @@ export function TimeField({
   onChange: (time: string) => void;
 }) {
   return (
-    <View style={{ gap: 8 }}>
-      <Field
-        label="Time (24-hour HH:MM)"
-        value={value}
-        onChangeText={onChange}
-        maxLength={5}
-        keyboardType="numbers-and-punctuation"
-        placeholder="07:00"
-      />
-      <View style={[ui.row, { flexWrap: "wrap" }]}>
-        {["07:00", "12:00", "18:00", "21:30"].map((time) => (
-          <Chip
-            key={time}
-            label={time}
-            selected={time === value}
-            onPress={() => onChange(time)}
-          />
-        ))}
-      </View>
-    </View>
+    <DateTimeField mode="time" label="Time" value={value} onChange={onChange} />
   );
 }
-const styles = StyleSheet.create({
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-    gap: 22,
-    width: "100%",
-    maxWidth: 600,
-    alignSelf: "center",
-  },
-  button: {
-    minHeight: 52,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buttonText: { fontSize: 16, fontWeight: "700", textAlign: "center" },
-  iconButton: {
-    minWidth: 44,
-    minHeight: 44,
-    borderRadius: 22,
-    backgroundColor: colors.sage,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chip: {
-    minHeight: 44,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  segment: {
-    flexDirection: "row",
-    backgroundColor: "#EBECE5",
-    borderRadius: 16,
-    padding: 3,
-  },
-  segmentItem: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 13,
-    paddingHorizontal: 5,
-    paddingVertical: 10,
-    justifyContent: "center",
-  },
-  date: {
-    flex: 1,
-    minHeight: 68,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 4,
-  },
-});
+const createStyles = (colors: Palette, premium: boolean) =>
+  StyleSheet.create({
+    content: {
+      padding: premium ? 20 : 12,
+      paddingBottom: 24,
+      gap: 14,
+      width: "100%",
+      maxWidth: 680,
+      alignSelf: "center",
+    },
+    header: {
+      backgroundColor: colors.toolbar,
+      marginHorizontal: premium ? 0 : -12,
+      marginTop: premium ? 0 : -12,
+      paddingHorizontal: premium ? 0 : 12,
+      paddingVertical: premium ? 4 : 12,
+      minHeight: 60,
+      justifyContent: "center",
+      gap: 4,
+    },
+    button: {
+      minHeight: 52,
+      borderRadius: premium ? 16 : 2,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    buttonText: {
+      fontSize: 16,
+      fontWeight: "500",
+      textAlign: "center",
+      flexShrink: 1,
+    },
+    iconButton: {
+      minWidth: 48,
+      minHeight: 48,
+      borderRadius: premium ? 24 : 2,
+      backgroundColor: colors.sage,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    chip: {
+      minHeight: 48,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+      borderRadius: premium ? 24 : 2,
+      borderWidth: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    segment: {
+      flexDirection: "row",
+      backgroundColor: premium ? colors.sage : colors.button,
+      borderRadius: premium ? 16 : 0,
+      borderWidth: 1,
+      borderColor: colors.buttonBorder,
+    },
+    segmentItem: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: premium ? 14 : 0,
+      paddingHorizontal: 5,
+      paddingVertical: 10,
+      justifyContent: "center",
+    },
+    date: {
+      flex: 1,
+      minHeight: 68,
+      borderRadius: premium ? 28 : 0,
+      borderWidth: premium ? 0 : 1,
+      borderColor: colors.border,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 4,
+    },
+  });
+
+const classicStyles = createStyles(classicTheme.colors, false);
+const premiumStyles = createStyles(premiumTheme.colors, true);

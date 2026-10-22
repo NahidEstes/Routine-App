@@ -91,6 +91,7 @@ export interface RoutineSession {
   ended: boolean;
 }
 export interface TrackerState {
+  features: HabitFeatures;
   habits: Habit[];
   versions: HabitVersion[];
   occurrences: Entry[];
@@ -98,9 +99,47 @@ export interface TrackerState {
   weeklyPlans: WeeklyPlan[];
   sessions: RoutineSession[];
   busyDates: string[];
+  notes: DailyNote[];
+}
+export interface DailyNote {
+  entryId: string;
+  habitId: string;
+  text: string;
+  updatedAt: string;
 }
 export type ScheduledItem = Entry & {
+  paused?: boolean;
   habit: Habit;
   optional?: boolean;
   displayStatus: Status | "missed";
 };
+
+export type Priority = "high" | "normal" | "low";
+export type HabitSort = "time" | "priority" | "custom";
+export interface HabitPause {
+  id: string;
+  habitIds: string[];
+  start: DateKey;
+  end: DateKey;
+  reason: string;
+}
+export interface WeeklyReview {
+  week: DateKey;
+  wentWell: string;
+  obstacles: string;
+  change: string;
+  completed: boolean;
+  updatedAt: string;
+}
+export interface HabitFeatures {
+  pauses: HabitPause[];
+  organization: { habitId: string; priority: Priority; pinned: boolean }[];
+  order: string[];
+  sort: HabitSort;
+  search: string;
+  priorityFilter: "all" | Priority;
+  typeFilter: "all" | Goal["type"];
+  reviews: WeeklyReview[];
+  seenAchievements: string[];
+  dismissedReviewWeeks: string[];
+}

@@ -7,6 +7,8 @@ import {
   weekDates,
 } from "../utils/dates";
 import { clone } from "../utils/clone";
+import { applyPlanningAction, type PlanningAction } from "./planningActions";
+import { isPaused } from "./organization";
 import {
   activeOn,
   entriesForDate,
@@ -19,7 +21,33 @@ import {
 } from "./schedule";
 
 export type Action =
+  | PlanningAction
+  | {
+      type: "saveNote";
+      id: string;
+      habitId: string;
+      date: string;
+      text: string;
+      updatedAt: string;
+    }
   | { type: "saveHabit"; habit: Habit }
+  | {
+      type: "increment";
+      id: string;
+      habitId: string;
+      date: string;
+      delta: number;
+      busy: boolean;
+    }
+  | {
+      type: "timerAmount";
+      id: string;
+      habitId: string;
+      date: string;
+      delta: number;
+      busy: boolean;
+      sessionId: string;
+    }
   | { type: "deleteHabit"; id: string }
   | { type: "restoreHabit"; id: string }
   | { type: "saveRoutine"; routine: Routine }
@@ -68,7 +96,8 @@ function validateHabit(h: Habit) {
     h.busyGoal !== null &&
     (!Number.isFinite(h.busyGoal) ||
       h.busyGoal <= 0 ||
-      h.busyGoal > h.goal.value)
+      h.busyGoal > h.goal.value ||
+      (h.goal.type === "count" && !Number.isInteger(h.busyGoal)))
   )
     throw new Error("Busy goal must be between zero and the full goal.");
   if (h.time !== null && !validTime(h.time))
@@ -94,12 +123,32 @@ function resolveEntry(
   date: string,
   today: string,
 ): Entry {
+  const saved = state.occurrences.find((e) => e.id === id);
+  if (
+    saved &&
+    (saved.excluded || saved.habitId !== habitId || saved.date !== date)
+  )
+    throw new Error(
+      "This task changed. Reopen the selected day and try again.",
+    );
+  const planned = plannedEntry(state, habitId, date);
   const entry =
-    state.occurrences.find((e) => e.id === id && !e.excluded) ??
-    entriesForDate(state, date, today).find((e) => e.id === id) ??
-    plannedEntry(state, habitId, date);
+    saved ??
+    entriesForDate(state, date, today).find(
+      (e) => e.id === id && e.habitId === habitId,
+    ) ??
+    (planned?.id === id &&
+    !state.occurrences.some(
+      (e) => e.habitId === habitId && e.date === date && !e.excluded,
+    )
+      ? planned
+      : undefined);
   if (!entry || entry.excluded)
     throw new Error("This task is no longer scheduled for that day.");
+  if (isPaused(state, habitId, date))
+    throw new Error(
+      "This habit is paused on that day. Resume it before recording or moving progress.",
+    );
   return entry;
 }
 function replaceEntry(state: TrackerState, entry: Entry) {
@@ -141,6 +190,86 @@ export function applyAction(
 ): TrackerState {
   let state = materialize(input, today);
   switch (action.type) {
+    case "pauseHabits":
+    case "resumePause":
+    case "organizeHabit":
+    case "moveHabit":
+    case "habitFilters":
+    case "saveReview":
+    case "seenAchievements":
+    case "dismissReview":
+      return applyPlanningAction(state, action, today);
+    case "increment":
+    case "timerAmount": {
+      if (action.date > today)
+        throw new Error("Record progress on today or a past day.");
+      const entry = resolveEntry(
+        state,
+        action.id,
+        action.habitId,
+        action.date,
+        today,
+      );
+      if (!Number.isFinite(action.delta) || action.delta <= 0)
+        throw new Error("Enter a positive amount of progress.");
+      if (
+        action.type === "increment" &&
+        (entry.snapshot.goal.type !== "count" ||
+          !Number.isInteger(action.delta))
+      )
+        throw new Error(
+          "Quick increments require a count habit and a whole number.",
+        );
+      if (
+        action.type === "timerAmount" &&
+        (entry.snapshot.goal.type !== "duration" ||
+          action.delta > 1440 ||
+          !action.sessionId)
+      )
+        throw new Error("Record up to 1,440 minutes for a duration habit.");
+      if (entry.status !== "pending")
+        throw new Error(
+          "This task is already completed or skipped. Edit its progress from Habit options.",
+        );
+      const busy = entry.amount > 0 ? entry.busy : action.busy;
+      return record(state, entry, entry.amount + action.delta, busy);
+    }
+    case "saveNote": {
+      if (action.text.length > 2000)
+        throw new Error("Keep your note within 2,000 characters.");
+      const previous = state.notes.find(
+        (n) => n.entryId === action.id && n.habitId === action.habitId,
+      );
+      if (action.date > today && !previous)
+        throw new Error("Add a note on today or an earlier record.");
+      if (!Number.isFinite(Date.parse(action.updatedAt)))
+        throw new Error("Invalid note timestamp.");
+      const existing = state.occurrences.find(
+        (e) =>
+          e.id === action.id &&
+          e.habitId === action.habitId &&
+          e.date === action.date,
+      );
+      const entry =
+        previous && existing
+          ? existing
+          : resolveEntry(state, action.id, action.habitId, action.date, today);
+      const notes = state.notes.filter((note) => note.entryId !== entry.id);
+      if (!action.text.trim()) return { ...state, notes };
+      // Capture flexible weekly records too, without recording any progress.
+      return {
+        ...(existing ? state : replaceEntry(state, entry)),
+        notes: [
+          ...notes,
+          {
+            entryId: entry.id,
+            habitId: entry.habitId,
+            text: action.text,
+            updatedAt: action.updatedAt,
+          },
+        ],
+      };
+    }
     case "busy":
       return {
         ...state,
@@ -186,6 +315,7 @@ export function applyAction(
               e.habitId !== habit.id ||
               e.sourceDate < effectiveFrom ||
               e.rescheduled ||
+              state.notes.some((note) => note.entryId === e.id) ||
               e.amount > 0 ||
               e.status !== "pending",
           )
@@ -211,7 +341,9 @@ export function applyAction(
       return {
         ...state,
         habits: state.habits.map((h) =>
-          h.id === action.id ? { ...h, archivedAt: addDays(today, 1) } : h,
+          h.id === action.id && !h.archivedAt
+            ? { ...h, archivedAt: addDays(today, 1) }
+            : h,
         ),
         occurrences: state.occurrences.map((e) =>
           e.habitId === action.id &&
@@ -224,7 +356,7 @@ export function applyAction(
       };
     case "restoreHabit": {
       const h = state.habits.find((h) => h.id === action.id);
-      if (!h) return state;
+      if (!h?.archivedAt) return state;
       const restored = { ...h, archivedAt: undefined };
       // A fresh version prevents generating obligations over the archived gap.
       const start = today;
@@ -261,7 +393,11 @@ export function applyAction(
           ...state,
           habits: state.habits.map((x) => (x.id === h.id ? restored : x)),
           occurrences: state.occurrences.filter(
-            (e) => e.habitId !== h.id || !e.excluded || e.sourceDate < today,
+            (e) =>
+              e.habitId !== h.id ||
+              !e.excluded ||
+              e.sourceDate < today ||
+              state.notes.some((note) => note.entryId === e.id),
           ),
           versions,
         },
@@ -279,6 +415,7 @@ export function applyAction(
             !s.name.trim() ||
             s.minutes <= 0 ||
             !Number.isFinite(s.minutes) ||
+            !Number.isFinite(s.busyMinutes) ||
             s.busyMinutes <= 0 ||
             s.busyMinutes > s.minutes,
         )
@@ -355,6 +492,8 @@ export function applyAction(
           "Undo completion, skip or recorded progress before moving this task.",
         );
       if (action.date < today) throw new Error("Choose today or a future day.");
+      if (isPaused(state, source.habitId, action.date))
+        throw new Error("That date is paused. Choose a day outside the pause.");
       if (action.scope === "future" && source.date < today)
         throw new Error(
           "Change future rules from today or a future occurrence. Past entries can be moved individually.",
@@ -362,9 +501,14 @@ export function applyAction(
       const collision = entriesForDate(state, action.date, today).find(
         (e) => e.habitId === source.habitId && e.id !== source.id,
       );
-      if (collision && (collision.status !== "pending" || collision.amount > 0))
+      if (
+        collision &&
+        (collision.status !== "pending" ||
+          collision.amount > 0 ||
+          state.notes.some((note) => note.entryId === collision.id))
+      )
         throw new Error(
-          "That day already has progress for this habit. Choose another day.",
+          "That day already has progress or a note for this habit. Choose another day.",
         );
       if (collision)
         state = replaceEntry(state, { ...collision, excluded: true });
@@ -375,20 +519,23 @@ export function applyAction(
             "Restore this habit before changing future schedules.",
           );
         const delta = daysApart(source.date, action.date);
-        const habit = {
-          ...clone(source.snapshot),
+        const shiftSchedule = (definition: Habit): Habit => ({
+          ...clone(definition),
           time: action.time,
           repeat: {
-            ...source.snapshot.repeat,
-            days: source.snapshot.repeat.days.map(
+            ...definition.repeat,
+            days: definition.repeat.days.map(
               (d) => (((d + delta) % 7) + 7) % 7,
             ),
           },
-        };
+        });
+        const habit = shiftSchedule(
+          versionAt(state, current.id, source.date)?.habit ?? current,
+        );
         state = {
           ...state,
           habits: state.habits.map((h) =>
-            h.id === habit.id ? { ...habit, archivedAt: h.archivedAt } : h,
+            h.id === habit.id ? shiftSchedule(h) : h,
           ),
           versions: [
             ...state.versions.filter(
@@ -401,6 +548,16 @@ export function applyAction(
               startDate: action.date,
               habit,
             },
+            ...state.versions
+              .filter(
+                (v) => v.habitId === habit.id && v.effectiveFrom > source.date,
+              )
+              .map((v) => ({
+                ...v,
+                startDate:
+                  v.startDate < action.date ? action.date : v.startDate,
+                habit: shiftSchedule(v.habit),
+              })),
           ],
           occurrences: state.occurrences.filter(
             (e) =>
@@ -409,6 +566,7 @@ export function applyAction(
               e.date < source.date ||
               e.excluded ||
               e.rescheduled ||
+              state.notes.some((note) => note.entryId === e.id) ||
               e.amount > 0 ||
               e.status !== "pending",
           ),
@@ -464,6 +622,10 @@ export function applyAction(
       if (session.date > today)
         throw new Error("This routine date is in the future.");
       if (step.habitId) {
+        if (isPaused(state, step.habitId, session.date))
+          throw new Error(
+            "The linked habit is paused on this routine day. Resume it or unlink this step before recording progress.",
+          );
         const item = entriesForDate(state, session.date, today).find(
           (e) => e.habitId === step.habitId,
         );

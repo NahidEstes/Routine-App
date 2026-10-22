@@ -1,4 +1,5 @@
 import type { Database } from "./database";
+import { defaultFeatures } from "../domain/organization";
 export const migrations = [
   `CREATE TABLE habits (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);
  CREATE TABLE habit_versions (id TEXT PRIMARY KEY NOT NULL, habit_id TEXT NOT NULL REFERENCES habits(id), effective_from TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(habit_id,effective_from));
@@ -10,6 +11,9 @@ export const migrations = [
  CREATE UNIQUE INDEX entry_one_per_habit_day ON entries(habit_id,date) WHERE excluded=0;
  CREATE INDEX entry_date ON entries(date);
  CREATE INDEX version_lookup ON habit_versions(habit_id,effective_from);`,
+  `CREATE TABLE daily_notes (entry_id TEXT PRIMARY KEY NOT NULL REFERENCES entries(id), habit_id TEXT NOT NULL REFERENCES habits(id), payload TEXT NOT NULL);`,
+  `CREATE TABLE IF NOT EXISTS timer_receipts (id TEXT PRIMARY KEY NOT NULL);`,
+  `INSERT OR IGNORE INTO settings (id,payload) VALUES ('habitFeatures','${JSON.stringify(defaultFeatures())}');`,
 ];
 export async function migrate(db: Database) {
   await db.execAsync("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");

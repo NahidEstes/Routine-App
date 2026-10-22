@@ -19,24 +19,55 @@ import {
 import { useTracker } from "../state/TrackerProvider";
 import type { Routine, RoutineStep } from "../models/types";
 import { DAY_NAMES, formatTime, validTime } from "../utils/dates";
-import { colors, ui } from "../theme";
+import { useTheme } from "../theme";
+import {
+  duplicateRoutine,
+  routineFromTemplate,
+  routineTemplates,
+} from "../domain/routineTemplates";
 
 export default function RoutineScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { colors, ui } = useTheme();
+  const {
+    id,
+    template: templateId,
+    duplicate: duplicateId,
+  } = useLocalSearchParams<{
+    id?: string;
+    template?: string;
+    duplicate?: string;
+  }>();
   const { state, dispatch, selectedDate, saving, today } = useTracker();
-  const [sessionDate] = useState(selectedDate);
+  const [openedDate] = useState(selectedDate);
+  // Keep an unfinished session on its original day; a new run follows date rollover.
+  const unfinished =
+    state.sessions.find(
+      (s) => s.routineId === id && s.date === openedDate && !s.ended,
+    ) ??
+    (selectedDate === today
+      ? [...state.sessions]
+          .reverse()
+          .find((s) => s.routineId === id && !s.ended)
+      : undefined);
+  const sessionDate = unfinished?.date ?? selectedDate;
   const existing = state.routines.find((r) => r.id === id);
+  const template = routineTemplates.find((t) => t.id === templateId);
+  const original = state.routines.find((r) => r.id === duplicateId);
   const [draft, setDraft] = useState<Routine>(() =>
     existing
       ? clone(existing)
-      : {
-          id: createId("routine"),
-          name: "",
-          subtitle: "A fresh start",
-          time: "07:00",
-          days: [1, 2, 3, 4, 5],
-          steps: [],
-        },
+      : original
+        ? duplicateRoutine(original)
+        : template
+          ? routineFromTemplate(template)
+          : {
+              id: createId("routine"),
+              name: "",
+              subtitle: "A fresh start",
+              time: "07:00",
+              days: [1, 2, 3, 4, 5],
+              steps: [],
+            },
   );
   const [editing, setEditing] = useState(!existing);
   const [mode, setMode] = useState<"full" | "busy">("full");
@@ -51,6 +82,7 @@ export default function RoutineScreen() {
   const activeMode = running ? (session!.busy ? "busy" : "full") : mode;
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menu, setMenu] = useState(false);
   const routine = editing
     ? draft
     : {
@@ -134,7 +166,10 @@ export default function RoutineScreen() {
       return;
     setDraft(updated);
   }
-  if (id && !existing)
+  if (
+    (id && !existing) ||
+    (!id && ((templateId && !template) || (duplicateId && !original)))
+  )
     return (
       <Screen>
         <Header back title="Routine" />
@@ -153,17 +188,72 @@ export default function RoutineScreen() {
         }
         action={
           !editing && !running ? (
-            <IconButton
-              name="pencil-outline"
-              label="Edit routine"
-              onPress={() => {
-                setDraft(clone(routine));
-                setEditing(true);
-              }}
-            />
+            <View style={ui.row}>
+              <IconButton
+                name="pencil-outline"
+                label="Edit routine"
+                onPress={() => {
+                  setDraft(clone(routine));
+                  setEditing(true);
+                }}
+              />
+              <IconButton
+                name="ellipsis-horizontal"
+                label="Routine menu"
+                onPress={() => setMenu(!menu)}
+              />
+            </View>
           ) : undefined
         }
       />
+      {menu && existing && !editing && !running && (
+        <View style={ui.card}>
+          <Text style={ui.heading}>Routine options</Text>
+          <Button
+            label="Duplicate"
+            secondary
+            disabled={saving}
+            icon="copy-outline"
+            onPress={() => {
+              setMenu(false);
+              router.push({
+                pathname: "/routine",
+                params: { duplicate: existing.id },
+              });
+            }}
+          />
+          <Button
+            label="Close routine menu"
+            secondary
+            onPress={() => setMenu(false)}
+          />
+        </View>
+      )}
+      {editing && !existing && (template || original) && (
+        <View style={ui.sageCard}>
+          <Text style={ui.heading}>
+            {original ? `Copy of ${original.name}` : `From ${template!.name}`}
+          </Text>
+          <Text style={ui.body}>
+            {original
+              ? "Rename this independent copy and review each linked habit below. Edit a step to change or remove its link. Previous sessions and completions are not copied."
+              : "Edit this example before saving. No habits, completions or history are created by using a template."}
+          </Text>
+          {original && (
+            <Text style={ui.small}>
+              Kept habit links:{" "}
+              {draft.steps
+                .filter((s) => s.habitId)
+                .map(
+                  (s) =>
+                    state.habits.find((h) => h.id === s.habitId)?.name ??
+                    "Unavailable habit",
+                )
+                .join(", ") || "None — all steps are standalone"}
+            </Text>
+          )}
+        </View>
+      )}
       {editing ? (
         <>
           <Field
@@ -177,7 +267,7 @@ export default function RoutineScreen() {
             label="A little intention"
             value={draft.subtitle}
             onChangeText={(subtitle) => setDraft({ ...draft, subtitle })}
-            maxLength={80}
+            maxLength={200}
           />
           <TimeField
             value={draft.time}
@@ -259,7 +349,7 @@ export default function RoutineScreen() {
             style={{
               width: 28,
               height: 28,
-              borderRadius: 14,
+              borderRadius: 0,
               backgroundColor: colors.sage,
               alignItems: "center",
               justifyContent: "center",
@@ -282,7 +372,9 @@ export default function RoutineScreen() {
                   style={{ color: colors.amber, fontSize: 13, marginTop: 4 }}
                 >
                   {activeMode === "full" ? s.minutes : s.busyMinutes} min
-                  {s.habitId ? " · Linked habit goal" : ""}
+                  {s.habitId
+                    ? ` · Linked: ${state.habits.find((h) => h.id === s.habitId)?.name ?? "Unavailable habit"}`
+                    : " · Standalone"}
                 </Text>
               </Pressable>
               {running && (
@@ -300,13 +392,13 @@ export default function RoutineScreen() {
                 <IconButton
                   name="arrow-up"
                   label={`Move ${s.name} up`}
-                  disabled={index === 0}
+                  disabled={saving || index === 0}
                   onPress={() => moveStep(index, -1)}
                 />
                 <IconButton
                   name="arrow-down"
                   label={`Move ${s.name} down`}
-                  disabled={index === routine.steps.length - 1}
+                  disabled={saving || index === routine.steps.length - 1}
                   onPress={() => moveStep(index, 1)}
                 />
                 <IconButton
@@ -340,7 +432,7 @@ export default function RoutineScreen() {
               onPress={() => setStep({ ...step, habitId: undefined })}
             />
             {state.habits
-              .filter((h) => !h.archivedAt)
+              .filter((h) => !h.archivedAt || h.id === step.habitId)
               .map((h) => (
                 <Chip
                   key={h.id}
@@ -387,7 +479,7 @@ export default function RoutineScreen() {
               {error}
             </Text>
           )}
-          <Button label="Save step" onPress={saveStep} />
+          <Button label="Save step" disabled={saving} onPress={saveStep} />
           <Button
             label="Cancel step"
             secondary
@@ -399,6 +491,7 @@ export default function RoutineScreen() {
           {routine.steps.some((s) => s.id === step.id) && (
             <Button
               label="Remove step"
+              disabled={saving}
               danger
               secondary
               onPress={async () => {
@@ -524,6 +617,7 @@ export default function RoutineScreen() {
             <Button
               label="Confirm archive"
               danger
+              disabled={saving}
               onPress={async () => {
                 if (
                   !(await dispatch({ type: "deleteRoutine", id: existing.id }))

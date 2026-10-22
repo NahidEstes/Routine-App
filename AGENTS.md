@@ -1,5 +1,12 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+## Project location — user decision
+
+- The canonical project root is `D:\My Projects\Routine App`.
+- Perform all project work, edits, builds, and artifact creation in this folder.
+- Do not use `C:\Users\nahid\OneDrive\Documents\ChatGPT\Routine App` as the working project or treat it as the source of truth.
+- Resolve design references and project briefs from this project's own `design-reference` folder. Earlier chat prompts containing the OneDrive path are superseded by this instruction.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:

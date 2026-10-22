@@ -8,7 +8,8 @@ import {
 import { weekDates } from "../utils/dates";
 import type { ScheduledItem } from "../models/types";
 import { HabitCard } from "./EntryCard";
-import { ui } from "../theme";
+import { useTheme } from "../theme";
+import { matchesHabit, sortHabits, isPaused } from "../domain/organization";
 export function WeeklyGoals({
   date,
   onReschedule,
@@ -16,9 +17,15 @@ export function WeeklyGoals({
   date: string;
   onReschedule: (item: ScheduledItem) => void;
 }) {
+  const { ui } = useTheme();
   const { state, today } = useTracker();
   const week = weekDates(date)[0];
-  const plans = state.habits.flatMap((h) => {
+  const plans = sortHabits(
+    state,
+    state.habits.filter((h) => matchesHabit(state, h)),
+    (h) => h.id,
+    (h) => h.time,
+  ).flatMap((h) => {
     const plan = weeklyPlan(state, h.id, week);
     return plan ? [plan] : [];
   });
@@ -56,8 +63,24 @@ export function WeeklyGoals({
           {!items.some((e) => e.habitId === plan.habitId) && (
             <Text style={ui.small}>
               {weeklyCompleted(state, plan) >= plan.target
-                ? "Weekly target met. Enjoy the space."
-                : "No recorded session on this date."}
+                ? plan.target === 0
+                  ? "Paused week · No credits required."
+                  : "Weekly target met. Enjoy the space."
+                : isPaused(state, plan.habitId, date)
+                  ? "This habit is paused on this date."
+                  : "No recorded session on this date."}
+            </Text>
+          )}
+          {state.features.pauses.some(
+            (p) =>
+              p.habitIds.includes(plan.habitId) &&
+              p.start <= weekDates(date)[6] &&
+              p.end >= week,
+          ) && (
+            <Text style={ui.small}>
+              Pause adjustment: weekly target × active eligible days ÷ all
+              eligible days, rounded up. Existing completion credits are
+              preserved.
             </Text>
           )}
         </View>

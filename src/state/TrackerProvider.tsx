@@ -15,12 +15,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { TrackerState } from "../models/types";
-import { emptyState, materialize } from "../domain/schedule";
+import { emptyState, entriesForDate, materialize } from "../domain/schedule";
+import { previousProgressAction } from "../presentation/habits";
 import { applyAction, type Action } from "../domain/actions";
 import { localToday } from "../utils/dates";
 import { openRepository } from "../storage/open";
 import type { TrackerRepository } from "../storage/repository";
-import { colors, ui } from "../theme";
+import { WriteQueue } from "../storage/writeQueue";
+import { useTheme } from "../theme";
+import { createBackup, prepareRestore, type Backup } from "../domain/backup";
+import { createId } from "../utils/id";
+import {
+  baselineAchievements,
+  earnedAchievementIds,
+} from "../domain/achievements";
 
 type ContextValue = {
   state: TrackerState;
@@ -32,13 +40,26 @@ type ContextValue = {
   setBusy: (busy: boolean) => void;
   saving: boolean;
   error: string;
+  exportSnapshot: () => Promise<Backup>;
+  restoreSnapshot: (backup: Backup) => Promise<boolean>;
+  feedback: { message: string; undo?: Action } | null;
+  notify: (message: string, undo?: Action) => void;
+  dismissFeedback: () => void;
+  achievementNotice: string[];
+  dismissAchievements: () => void;
 };
 const Context = createContext<ContextValue | null>(null);
 export function TrackerProvider({ children }: React.PropsWithChildren) {
+  const { colors, ui } = useTheme();
   const [state, setState] = useState(emptyState);
+  const [achievementNotice, setAchievementNotice] = useState<string[]>([]);
   const current = useRef(state);
   const repo = useRef<TrackerRepository | null>(null);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const queue = useRef(new WriteQueue());
+  const [feedback, setFeedback] = useState<{
+    message: string;
+    undo?: Action;
+  } | null>(null);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [saving, setSaving] = useState(false);
@@ -49,7 +70,10 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
     try {
       const storage = await openRepository();
       const stored = await storage.load();
-      const next = materialize(stored, localToday());
+      const next = baselineAchievements(
+        materialize(stored, localToday()),
+        localToday(),
+      );
       if (JSON.stringify(next) !== JSON.stringify(stored))
         await storage.save(next);
       repo.current = storage;
@@ -72,15 +96,53 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
   }, [load]);
   const dispatch = useCallback((action: Action) => {
     const run = async () => {
-      setSaving(true);
       try {
         if (!repo.current)
           throw new Error("Storage is unavailable. Retry loading first.");
-        const next = applyAction(current.current, action, localToday());
-        await repo.current.save(next);
+        if (
+          action.type === "timerAmount" &&
+          (await repo.current.hasTimerReceipt(action.sessionId))
+        )
+          return true;
+        const previous =
+          action.type === "timerAmount"
+            ? entriesForDate(current.current, action.date, localToday()).find(
+                (item) => item.id === action.id,
+              )
+            : undefined;
+        let next =
+          action.type === "timerAmount"
+            ? await repo.current.recordTimer(
+                current.current,
+                action,
+                localToday(),
+              )
+            : applyAction(current.current, action, localToday());
+        const earned = earnedAchievementIds(next, localToday());
+        const newAchievements = earned.filter(
+          (id) => !current.current.features.seenAchievements.includes(id),
+        );
+        // Persist acknowledgement with progress; reopening cannot repeat celebrations.
+        next = baselineAchievements(next, localToday());
+        if (action.type !== "timerAmount") await repo.current.save(next);
+        const earnedSet = new Set<string>(earned);
+        setAchievementNotice((previous) => [
+          ...new Set([
+            ...previous.filter((id) => earnedSet.has(id)),
+            ...newAchievements,
+          ]),
+        ]);
         current.current = next;
         setState(next);
         setError("");
+        setFeedback(
+          previous && action.type === "timerAmount"
+            ? {
+                message: `${previous.habit.name}: ${action.delta} ${action.delta === 1 ? "minute" : "minutes"} recorded`,
+                undo: previousProgressAction(previous),
+              }
+            : null,
+        );
         return true;
       } catch (e) {
         setError(
@@ -89,14 +151,58 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
             : "Could not save. Your previous data is unchanged.",
         );
         return false;
-      } finally {
-        setSaving(false);
       }
     };
-    const result = queue.current.then(run, run);
-    queue.current = result;
-    return result;
+    return queue.current.enqueue(JSON.stringify(action), run, setSaving);
   }, []);
+  const exportSnapshot = useCallback(async () => {
+    let snapshot: Backup | undefined;
+    // Capture after all earlier writes, using the last committed state only.
+    await queue.current.enqueue(
+      createId("export"),
+      async () => {
+        snapshot = createBackup(current.current);
+        return true;
+      },
+      setSaving,
+    );
+    if (!snapshot) throw new Error("Could not capture your saved data.");
+    return snapshot;
+  }, []);
+  const restoreSnapshot = useCallback(
+    (backup: Backup) =>
+      queue.current.enqueue(
+        "restore",
+        async () => {
+          try {
+            if (!repo.current) throw new Error("Local storage is unavailable.");
+            const now = localToday();
+            const prepared = prepareRestore(backup, now);
+            const next = await repo.current.restore({
+              ...prepared,
+              data: baselineAchievements(prepared.data, now),
+            });
+            current.current = next;
+            setState(next);
+            setToday(now);
+            setSelectedDate(now);
+            setFeedback(null);
+            setAchievementNotice([]);
+            setError("");
+            return true;
+          } catch (e) {
+            setError(
+              e instanceof Error
+                ? e.message
+                : "Restore failed. Your previous saved data is unchanged.",
+            );
+            return false;
+          }
+        },
+        setSaving,
+      ),
+    [],
+  );
   useEffect(() => {
     const refresh = () => {
       const now = localToday();
@@ -169,6 +275,13 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
         },
         saving,
         error,
+        exportSnapshot,
+        restoreSnapshot,
+        feedback,
+        notify: (message, undo) => setFeedback({ message, undo }),
+        dismissFeedback: () => setFeedback(null),
+        achievementNotice,
+        dismissAchievements: () => setAchievementNotice([]),
       }}
     >
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -185,7 +298,7 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
               action.
             </Text>
             <Pressable accessibilityRole="button" onPress={() => setError("")}>
-              <Text style={[ui.label, { minHeight: 44, paddingTop: 12 }]}>
+              <Text style={[ui.label, { minHeight: 48, paddingTop: 12 }]}>
                 Dismiss
               </Text>
             </Pressable>

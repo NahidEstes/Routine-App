@@ -1,5 +1,11 @@
 import type { TrackerState } from "../models/types";
-import { entriesForDate, weeklyCompleted, weeklyPlan } from "./schedule";
+import {
+  entriesForDate,
+  plannedEntry,
+  weeklyCompleted,
+  weeklyPlan,
+} from "./schedule";
+import { isPaused } from "./organization";
 import { datesBetween, localToday, weekDates } from "../utils/dates";
 export const itemsForDate = entriesForDate;
 export function completion(
@@ -10,7 +16,7 @@ export function completion(
   const items = dates
     .filter((d) => d <= today)
     .flatMap((d) => entriesForDate(state, d, today))
-    .filter((e) => !e.weekly);
+    .filter((e) => !e.weekly && !e.paused);
   const done = items.filter((e) => e.status === "done").length;
   return {
     done,
@@ -61,7 +67,7 @@ export function habitConsistency(
   const daily = dates
     .filter((d) => d <= today)
     .flatMap((d) => entriesForDate(state, d, today))
-    .filter((e) => e.habitId === id && !e.weekly);
+    .filter((e) => e.habitId === id && !e.weekly && !e.paused);
   const plans = periodWeeklyPlans(state, dates, today).filter(
     (p) => p.habitId === id,
   );
@@ -79,7 +85,7 @@ export function bestStreak(state: TrackerState, today = localToday()) {
       const item = entriesForDate(state, date, today).find(
         (e) => e.habitId === h.id && !e.weekly,
       );
-      if (!item) continue;
+      if (!item || item.paused) continue;
       if (item.status === "done") run++;
       else if (date < today || item.status === "skipped") run = 0;
       best = Math.max(best, run);
@@ -94,9 +100,19 @@ export function weeklyStreak(
 ) {
   let best = 0,
     run = 0;
-  for (const p of state.weeklyPlans
+  for (const saved of state.weeklyPlans
     .filter((p) => p.habitId === id)
     .sort((a, b) => a.week.localeCompare(b.week))) {
+    const p = weeklyPlan(state, id, saved.week)!;
+    const eligibleDays = weekDates(p.week).filter(
+      (date) => plannedEntry(state, id, date)?.weekly,
+    );
+    if (
+      !p.target ||
+      (eligibleDays.length > 0 &&
+        eligibleDays.every((date) => isPaused(state, id, date)))
+    )
+      continue;
     if (weeklyCompleted(state, p) >= p.target) run++;
     else if (weekDates(p.week)[6] < today) run = 0;
     best = Math.max(best, run);

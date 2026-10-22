@@ -1,11 +1,16 @@
 import { useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { ScheduledItem } from "../models/types";
-import { useTracker } from "../state/TrackerProvider";
+import { useEntryActions } from "../hooks/useEntryActions";
+import { entryStatus, entryTarget } from "../presentation/habits";
 import { formatTime } from "../utils/dates";
-import { colors, ui } from "../theme";
-import { Button, Field, Icon, IconBubble } from "./ui";
+import { useTheme } from "../theme";
+import { useLocalFeatures } from "../state/LocalFeaturesProvider";
+import { Button, Icon, IconBubble, IconButton } from "./ui";
+import { HabitActions, ProgressEditor } from "./HabitInteractions";
+import { useTracker } from "../state/TrackerProvider";
+import { organizationFor } from "../domain/organization";
 
 export function HabitCard({
   item,
@@ -16,221 +21,193 @@ export function HabitCard({
   schedule?: boolean;
   onReschedule: () => void;
 }) {
-  const { dispatch, busy, today, state, saving } = useTracker();
-  const [editing, setEditing] = useState(false),
-    [amount, setAmount] = useState(String(item.amount)),
-    [useBusy, setUseBusy] = useState(item.amount > 0 ? item.busy : busy);
-  const [error, setError] = useState("");
-  const locked = item.date > today;
-  const archived = !!state.habits.find((h) => h.id === item.habitId)
-    ?.archivedAt;
-  const target =
-    item.amount > 0 || item.status === "done"
-      ? item.target
-      : busy && item.habit.busyGoal !== null
-        ? item.habit.busyGoal
-        : item.habit.goal.value;
-  const action = (status: "done" | "skipped" | "pending") => {
-    void dispatch({
-      type: "status",
-      id: item.id,
-      habitId: item.habitId,
-      date: item.date,
-      status,
-      busy,
-    });
-  };
-  async function save() {
-    if (
-      !amount.trim() ||
-      !Number.isFinite(Number(amount)) ||
-      Number(amount) < 0
-    ) {
-      setError("Enter zero or a positive amount.");
-      return;
-    }
-    if (
-      await dispatch({
-        type: "amount",
-        id: item.id,
-        habitId: item.habitId,
-        date: item.date,
-        amount: Number(amount),
-        busy: useBusy,
-      })
-    ) {
-      setEditing(false);
-      setError("");
-    }
-  }
+  const { colors, ui } = useTheme();
+  const actions = useEntryActions(item);
+  const { state } = useTracker();
+  const organization = organizationFor(state, item.habitId);
+  const { startTimer, timer, timerBusy, timerReady } = useLocalFeatures();
+  const [menu, setMenu] = useState(false);
+  const [progress, setProgress] = useState(false);
+  const done = item.status === "done",
+    skipped = item.status === "skipped";
+  const target = entryTarget(item, actions.busy);
+  const amountGoal = item.habit.goal.type !== "boolean";
+  const singular =
+    (
+      {
+        glasses: "glass",
+        pages: "page",
+        times: "time",
+        steps: "step",
+      } as Record<string, string>
+    )[item.habit.goal.unit] ?? item.habit.goal.unit;
+  const disabled = actions.saving || !actions.access.record;
   return (
-    <View
-      style={[
-        ui.card,
-        schedule && {
-          backgroundColor: ["Learning", "Mindfulness"].includes(
-            item.habit.category,
-          )
-            ? colors.amberLight
-            : colors.sage,
-          borderWidth: 0,
-        },
-      ]}
-    >
-      <View style={ui.row}>
-        <IconBubble name={item.habit.icon} />
+    <View style={[ui.card, { gap: 12 }]}>
+      <View style={[ui.row, { alignItems: "flex-start" }]}>
+        <IconBubble name={item.habit.icon} size={40} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${item.habit.name}`}
-          disabled={archived}
-          style={ui.grow}
+          accessibilityLabel={`Details for ${item.habit.name}${actions.access.hasNote ? ", has note" : ""}`}
+          style={[ui.grow, { minHeight: 48, justifyContent: "center", gap: 4 }]}
           onPress={() =>
-            router.push({ pathname: "/habit", params: { id: item.habitId } })
+            router.push({
+              pathname: "/habit-details",
+              params: { id: item.habitId, date: item.date, entryId: item.id },
+            })
           }
         >
-          <Text style={[ui.label, { fontSize: 16 }]}>{item.habit.name}</Text>
-          <Text style={ui.small}>
-            {formatTime(item.time)} ·{" "}
-            {item.habit.goal.type === "boolean"
-              ? "Done / Not done"
-              : `${item.amount}/${target} ${item.habit.goal.unit}`}
-          </Text>
-        </Pressable>
-        <Icon
-          name={
-            schedule
-              ? "repeat-outline"
-              : item.status === "done"
-                ? "checkmark-circle"
-                : item.status === "skipped"
-                  ? "remove-circle-outline"
-                  : item.displayStatus === "missed"
-                    ? "alert-circle-outline"
-                    : "ellipse-outline"
-          }
-        />
-      </View>
-      <Text
-        style={[
-          ui.small,
-          {
-            color:
-              item.displayStatus === "missed" ? colors.danger : colors.muted,
-          },
-        ]}
-      >
-        {item.optional
-          ? "Optional weekly opportunity"
-          : item.displayStatus === "missed"
-            ? "Missed · day ended"
-            : item.status === "skipped"
-              ? "Skipped"
-              : item.status === "done"
-                ? item.busy
-                  ? "Completed · Busy day goal"
-                  : "Completed · Full goal"
-                : locked
-                  ? "Upcoming"
-                  : "Pending"}
-        {archived ? " · Archived habit" : ""}
-        {item.rescheduled ? " · Rescheduled" : ""}
-      </Text>
-      <View style={{ flexDirection: "row", gap: 4 }}>
-        {!schedule && (
-          <>
-            <Action
-              label={item.status === "done" ? "Undo done" : "Done"}
-              name="checkmark"
-              disabled={locked || saving}
-              onPress={() =>
-                action(item.status === "done" ? "pending" : "done")
-              }
-            />
-            <Action
-              label={item.status === "skipped" ? "Undo skip" : "Skip"}
-              name="play-skip-forward-outline"
-              disabled={locked || saving}
-              onPress={() =>
-                action(item.status === "skipped" ? "pending" : "skipped")
-              }
-            />
-          </>
-        )}
-        <Action
-          label="Reschedule"
-          name="time-outline"
-          disabled={saving}
-          onPress={onReschedule}
-        />
-      </View>
-      {!schedule && item.habit.goal.type !== "boolean" && !locked && (
-        <Button
-          label={editing ? "Cancel progress edit" : "Record / edit progress"}
-          secondary
-          disabled={saving}
-          onPress={() => {
-            setAmount(String(item.amount));
-            setUseBusy(item.amount > 0 ? item.busy : busy);
-            setEditing(!editing);
-          }}
-        />
-      )}
-      {editing && (
-        <View style={{ gap: 10 }}>
-          <Field
-            label={`Recorded ${item.habit.goal.unit}`}
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="numeric"
-            maxLength={8}
-          />
-          {item.habit.busyGoal !== null && (
-            <View style={ui.between}>
-              <Text style={ui.label}>Use busy day goal</Text>
-              <Switch
-                accessibilityLabel="Use busy day goal"
-                value={useBusy}
-                onValueChange={setUseBusy}
-              />
-            </View>
+          <Text style={[ui.label, { fontSize: 17 }]}>{item.habit.name}</Text>
+          {(organization.pinned || organization.priority !== "normal") && (
+            <Text style={ui.small}>
+              {organization.pinned ? "Pinned · " : ""}
+              {organization.priority[0].toUpperCase() +
+                organization.priority.slice(1)}{" "}
+              priority
+            </Text>
           )}
-          {!!error && <Text style={ui.error}>{error}</Text>}
-          <Button label="Save progress" disabled={saving} onPress={save} />
+          <Text style={ui.small}>
+            {formatTime(item.time)}
+            {amountGoal
+              ? ` · ${item.amount} of ${target} ${item.habit.goal.unit}`
+              : ""}
+          </Text>
+          {(done ||
+            skipped ||
+            item.amount > 0 ||
+            actions.access.future ||
+            item.displayStatus === "missed" ||
+            actions.access.hasNote ||
+            schedule) && (
+            <Text
+              style={[
+                ui.small,
+                item.displayStatus === "missed" && { color: colors.danger },
+              ]}
+            >
+              {entryStatus(item, actions.today)}
+              {actions.access.hasNote ? " · Note" : ""}
+              {item.rescheduled ? " · Moved" : ""}
+              {actions.access.archived ? " · Archived" : ""}
+            </Text>
+          )}
+        </Pressable>
+        <IconButton
+          plain
+          name="ellipsis-horizontal"
+          label={`Options for ${item.habit.name}`}
+          onPress={() => setMenu(true)}
+        />
+      </View>
+      {amountGoal && (
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${item.amount} of ${target} ${item.habit.goal.unit}`}
+          accessibilityValue={{
+            min: 0,
+            max: target,
+            now: Math.min(target, item.amount),
+          }}
+          style={{
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: colors.track,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: 6,
+              width: `${Math.min(100, (item.amount / target) * 100)}%`,
+              backgroundColor: colors.green,
+            }}
+          />
         </View>
       )}
+      {item.paused ? (
+        <Text style={ui.small}>
+          Paused · Your recorded history is preserved.
+        </Text>
+      ) : done || skipped ? (
+        <Button
+          label={done ? "Undo completion" : "Undo skip"}
+          secondary
+          icon="arrow-undo-outline"
+          disabled={disabled}
+          onPress={actions.undo}
+        />
+      ) : item.habit.goal.type === "boolean" ? (
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel={`Complete ${item.habit.name}`}
+          accessibilityState={{ checked: false, disabled }}
+          disabled={disabled}
+          onPress={() => void actions.done()}
+          style={[ui.row, { minHeight: 48, opacity: disabled ? 0.45 : 1 }]}
+        >
+          <Icon name="square-outline" color={colors.muted} size={28} />
+          <Text style={ui.label}>
+            {actions.access.future ? "Planned" : "Mark as done"}
+          </Text>
+        </Pressable>
+      ) : item.habit.goal.type === "count" ? (
+        <Button
+          label={`+1 ${singular}`}
+          disabled={disabled}
+          onPress={actions.increment}
+        />
+      ) : (
+        <Button
+          label={
+            timer?.entryId === item.id ? "Timer in progress" : "Start timer"
+          }
+          icon="timer-outline"
+          disabled={
+            disabled ||
+            item.date !== actions.today ||
+            !!timer ||
+            timerBusy ||
+            !timerReady
+          }
+          onPress={() => startTimer(item, actions.busy)}
+        />
+      )}
+      {amountGoal && !done && !skipped && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit recorded progress for ${item.habit.name}`}
+          disabled={disabled}
+          onPress={() => setProgress(true)}
+          style={{
+            minHeight: 48,
+            justifyContent: "center",
+            opacity: disabled ? 0.45 : 1,
+          }}
+        >
+          <Text
+            style={[ui.small, { color: colors.green, textAlign: "center" }]}
+          >
+            {item.habit.goal.type === "duration"
+              ? "Log time manually"
+              : "Edit progress"}
+          </Text>
+        </Pressable>
+      )}
+      {menu && (
+        <HabitActions
+          item={item}
+          onClose={() => setMenu(false)}
+          onReschedule={onReschedule}
+          onProgress={() => setProgress(true)}
+        />
+      )}
+      {progress && (
+        <ProgressEditor
+          key={item.id}
+          item={item}
+          onClose={() => setProgress(false)}
+        />
+      )}
     </View>
-  );
-}
-function Action({
-  label,
-  name,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  name: "checkmark" | "play-skip-forward-outline" | "time-outline";
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={{
-        flex: 1,
-        minHeight: 44,
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 3,
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      <Icon name={name} size={16} />
-      <Text style={{ fontSize: 11, color: colors.green, fontWeight: "600" }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }

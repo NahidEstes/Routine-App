@@ -111,7 +111,7 @@ test("SQLite save → close → reopen retains habit versions, progress, skip, o
     rmSync(directory, { recursive: true, force: true });
   }
 });
-test("v1 → v2 migration retains existing habit data, is repeatable and adds sessions/indexes", async () => {
+test("v1 → current schema migration retains existing habit data, is repeatable and adds sessions/notes/indexes", async () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(migrations[0]);
@@ -128,7 +128,7 @@ test("v1 → v2 migration retains existing habit data, is repeatable and adds se
     assert.equal(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version,
-      2,
+      migrations.length,
     );
     assert.equal((await repository.load()).sessions.length, 0);
   } finally {

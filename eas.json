@@ -1,0 +1,17 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "credentialsSource": "local",
+      "env": {
+        "ROUTINE_OFFLINE_BUILD": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
