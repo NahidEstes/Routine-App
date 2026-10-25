@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../../components/ui";
 import { useTheme } from "../../theme";
 export default function TabLayout() {
-  const { colors, premium } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { fontScale } = useWindowDimensions();
   return (
@@ -15,14 +15,14 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: colors.toolbar,
+          backgroundColor: colors.card,
           borderTopColor: colors.border,
-          height: 66 + Math.max(0, (fontScale - 1) * 24) + insets.bottom,
+          height: 70 + Math.max(0, (fontScale - 1) * 24) + insets.bottom,
           paddingTop: 8,
           paddingBottom: Math.max(insets.bottom, 8),
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "600" },
-        tabBarActiveBackgroundColor: premium ? colors.background : "#1D2E39",
+        tabBarActiveBackgroundColor: "transparent",
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
@@ -31,7 +31,7 @@ export default function TabLayout() {
         options={{
           title: "Today",
           tabBarAccessibilityLabel: "Today tab",
-          tabBarIcon: ({ color }) => <Icon name="home-outline" color={color} />,
+          tabBarIcon: ({ color, focused }) => <Icon name={focused ? "home" : "home-outline"} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -55,12 +55,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="profile"
         options={{
-          title: "Settings",
-          tabBarAccessibilityLabel: "Settings tab",
+          title: "Profile",
+          tabBarAccessibilityLabel: "Profile tab",
           tabBarIcon: ({ color }) => (
-            <Icon name="settings-outline" color={color} />
+            <Icon name="person-outline" color={color} />
           ),
         }}
       />

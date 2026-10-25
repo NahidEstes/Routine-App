@@ -36,7 +36,7 @@ export default function Settings() {
     );
   return (
     <Screen>
-      <Header title="Settings" />
+      <Header back title="Settings" />
       <View style={ui.card}>
         <Text style={ui.heading}>App preferences</Text>
         <Text style={ui.body}>Language · English</Text>

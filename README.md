@@ -10,9 +10,13 @@ Backup/Restore, original routine templates/Duplicate and daily habit notes are d
 
 The simplified Today, habit details/actions, four-question form and agenda UI are documented in [UI changes and review checklist](docs/SIMPLIFIED-UI.md). Browser preview: `npm run web`; Android Expo Go preview: `npx expo start --android`.
 
-The default appearance is the [classic Android-style UI](docs/CLASSIC-UI.md), with Today, Schedule, Progress and Settings tabs. Settings → Upgrade Premium now offers a [7-day Premium design trial](docs/PREMIUM-TRIAL.md), then returns automatically to Classic. The $4.99/month paid plan remains a demo with Coming soon. The previously built [1.0.1 APK](docs/APK-1.0.1.md) contains Classic and the local data features; rebuild to install the new trial feature.
+The default appearance is the [classic Android-style UI](docs/CLASSIC-UI.md), with Today, Schedule, Progress and Profile tabs. Profile → Settings → Upgrade Premium offers a [7-day Premium design trial](docs/PREMIUM-TRIAL.md), then returns automatically to Classic. The $4.99/month paid plan remains a demo with Coming soon. The previously built [1.0.1 APK](docs/APK-1.0.1.md) contains Classic and the local data features; rebuild to install newer features.
 
 The [October 19 usability update](docs/USABILITY-2026-10-19.md) adds consistent English screens in both themes, starter habit drafts and onboarding, quick count actions, a persisted focus timer, simpler progress summaries, and opt-in local reminders with snooze. Reminders require a new native build with the installed Expo Notifications module. No APK was created for this update.
+
+The [Profile and Achievements update](docs/PROFILE-ACHIEVEMENTS-2026-10-22.md) adds a device-local profile, weekly activity summary, filterable activity timeline, badge collection/details and a small optional celebration. Settings now opens inside Profile. Existing tracker storage, backups and achievement rules are unchanged. No APK was built for this update.
+
+The [Modern Minimal Today update](docs/TODAY-MODERN-2026-10-24.md) continues the interrupted design work with compact cards, a smaller Up next highlight, calendar/week selection and an always-available Add habit button. Existing data, timer accounting, repeat rules and Classic/Premium trial behavior are preserved. No APK was built.
 
 ```powershell
 npm ci

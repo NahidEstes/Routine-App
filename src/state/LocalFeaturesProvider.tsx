@@ -31,6 +31,10 @@ type Features = {
   timerError: string;
   timerReady: boolean;
   timerBusy: boolean;
+  timerPanelOpen: boolean;
+  setTimerPanelOpen: (open: boolean) => void;
+  timerDockHeight: number;
+  setTimerDockHeight: (height: number) => void;
   updatePreferences: (
     change: (previous: LocalPreferences) => LocalPreferences,
   ) => Promise<boolean>;
@@ -54,6 +58,9 @@ export function LocalFeaturesProvider({ children }: React.PropsWithChildren) {
   const [timerReady, setTimerReady] = useState(false);
   const [timerError, setTimerError] = useState("");
   const [timerBusy, setTimerBusy] = useState(false);
+  // Presentation only: neither field is persisted or changes timer accounting.
+  const [timerPanelOpen, setTimerPanelOpen] = useState(false);
+  const [timerDockHeight, setTimerDockHeight] = useState(96);
   const timerLock = useRef(false);
   const reload = useCallback(async () => {
     await Promise.all([
@@ -139,6 +146,10 @@ export function LocalFeaturesProvider({ children }: React.PropsWithChildren) {
         timer,
         timerError,
         timerReady,
+        timerPanelOpen,
+        setTimerPanelOpen,
+        timerDockHeight,
+        setTimerDockHeight,
         timerBusy,
         updatePreferences,
         reload,

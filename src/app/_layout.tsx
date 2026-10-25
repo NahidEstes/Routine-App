@@ -8,6 +8,7 @@ import { LocalFeaturesProvider } from "../state/LocalFeaturesProvider";
 import { ReminderProvider } from "../state/ReminderProvider";
 import { FocusTimerDock } from "../components/FocusTimerDock";
 import { View } from "react-native";
+import { AchievementCelebration } from "../components/AchievementCelebration";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
@@ -18,13 +19,13 @@ export default function RootLayout() {
   );
 }
 function AppLayout() {
-  const { colors, premium } = useTheme();
+  const { colors } = useTheme();
   return (
     <TrackerProvider>
       <LocalFeaturesProvider>
         <ReminderProvider>
           <View style={{ flex: 1 }}>
-            <StatusBar style={premium ? "dark" : "light"} />
+            <StatusBar style="dark" />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -32,6 +33,8 @@ function AppLayout() {
               }}
             >
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="settings" />
+              <Stack.Screen name="achievements" />
               <Stack.Screen name="habit" />
               <Stack.Screen name="habit-details" />
               <Stack.Screen name="habits" />
@@ -46,6 +49,7 @@ function AppLayout() {
               <Stack.Screen name="habit-notes" />
             </Stack>
             <FocusTimerDock />
+            <AchievementCelebration />
           </View>
         </ReminderProvider>
       </LocalFeaturesProvider>

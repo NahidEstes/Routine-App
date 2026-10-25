@@ -53,6 +53,7 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
   const { colors, ui } = useTheme();
   const [state, setState] = useState(emptyState);
   const [achievementNotice, setAchievementNotice] = useState<string[]>([]);
+  const dismissAchievements = useCallback(() => setAchievementNotice([]), []);
   const current = useRef(state);
   const repo = useRef<TrackerRepository | null>(null);
   const queue = useRef(new WriteQueue());
@@ -281,7 +282,7 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
         notify: (message, undo) => setFeedback({ message, undo }),
         dismissFeedback: () => setFeedback(null),
         achievementNotice,
-        dismissAchievements: () => setAchievementNotice([]),
+        dismissAchievements,
       }}
     >
       <View style={{ flex: 1, backgroundColor: colors.background }}>

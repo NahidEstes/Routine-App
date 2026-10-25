@@ -19,10 +19,12 @@ export function FocusTimerDock() {
     timerBusy,
     timerError,
     reload,
+    timerPanelOpen: open,
+    setTimerPanelOpen: setOpen,
+    setTimerDockHeight,
   } = useLocalFeatures();
   const { colors, ui, premium } = useTheme();
   const [now, setNow] = useState(Date.now);
-  const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [minutes, setMinutes] = useState("");
@@ -49,6 +51,9 @@ export function FocusTimerDock() {
   return (
     <>
       <Pressable
+        onLayout={(event) =>
+          setTimerDockHeight(event.nativeEvent.layout.height)
+        }
         accessibilityRole="button"
         accessibilityLabel={`Focus timer for ${timer.name}`}
         onPress={() => {

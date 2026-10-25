@@ -1,12 +1,14 @@
 import Storage from "expo-sqlite/kv-store";
 import type { FocusSession } from "../domain/focusTimer";
 import { validDate, validTime } from "../utils/dates";
+import { validateProfile, type LocalProfile } from "../domain/profile";
 
 export type ReminderPreference = { enabled: boolean; time: string | null };
 export type LocalPreferences = {
   version: 1;
   onboardingSeen: boolean;
   reminders: Record<string, ReminderPreference>;
+  profile?: LocalProfile;
 };
 export const defaultPreferences: LocalPreferences = {
   version: 1,
@@ -35,9 +37,12 @@ export async function loadPreferences(): Promise<LocalPreferences> {
     throw new Error(
       "Could not read your local preferences. Retry loading; your saved habits are unchanged.",
     );
+  if (value.profile !== undefined)
+    return { ...value, profile: validateProfile(value.profile) };
   return value;
 }
 export async function savePreferences(value: LocalPreferences) {
+  if (value.profile !== undefined) validateProfile(value.profile);
   await Storage.setItem(PREFS_KEY, JSON.stringify(value));
 }
 export async function loadFocusSession(): Promise<FocusSession | null> {

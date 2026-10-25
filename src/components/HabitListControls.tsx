@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { Button, Chip, Field } from "./ui";
+import { Button, Chip, Field, IconButton } from "./ui";
 import { Sheet } from "./Sheet";
 import { useTracker } from "../state/TrackerProvider";
 import { useTheme } from "../theme";
@@ -10,7 +10,7 @@ type Filters = Pick<
   HabitFeatures,
   "sort" | "search" | "priorityFilter" | "typeFilter"
 >;
-export function HabitListControls() {
+export function HabitListControls({ compact = false, timeline = false }: { compact?: boolean; timeline?: boolean }) {
   const { state, dispatch, saving } = useTracker();
   const { ui } = useTheme();
   const f = state.features;
@@ -20,16 +20,12 @@ export function HabitListControls() {
     !!f.search || f.priorityFilter !== "all" || f.typeFilter !== "all";
   return (
     <View style={{ gap: 8 }}>
-      <Button
-        label={`Search, filter & sort${filtered ? " · Filters on" : ""}`}
-        icon="options-outline"
-        secondary
-        onPress={() => {
-          setDraft(f);
-          setOpen(true);
-        }}
-      />
-      {filtered && (
+      {compact ? (
+        <IconButton name="options-outline" plain={!filtered} label={filtered ? "Search, filter and sort. Filters on" : "Search, filter and sort"} onPress={() => { setDraft(f); setOpen(true); }} />
+      ) : (
+        <Button label={filtered ? "Search, filter & sort · Filters on" : "Search, filter & sort"} icon="options-outline" secondary onPress={() => { setDraft(f); setOpen(true); }} />
+      )}
+      {filtered && !compact && (
         <Button
           label="Clear filters"
           secondary
@@ -51,6 +47,7 @@ export function HabitListControls() {
             maxLength={60}
             onChangeText={(search) => setDraft({ ...draft, search })}
           />
+          {!timeline && <>
           <Text style={ui.label}>Sort order</Text>
           <View style={[ui.row, { flexWrap: "wrap" }]}>
             {(
@@ -72,6 +69,8 @@ export function HabitListControls() {
             Pinned habits come first within each time-of-day group. Use Manage
             habits to pin habits and change custom order.
           </Text>
+          </>}
+          {timeline && <Text style={ui.small}>The timeline always follows scheduled time. Filters apply to the habits shown.</Text>}
           <Text style={ui.label}>Priority</Text>
           <View style={[ui.row, { flexWrap: "wrap" }]}>
             {(["all", "high", "normal", "low"] as const).map((value) => (

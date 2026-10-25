@@ -1,5 +1,4 @@
 import { ProgressOverview } from "../components/ProgressOverview";
-import { Achievements, MilestoneNotice } from "../components/Achievements";
 import { WeeklyReviewCard } from "../components/WeeklyReviewCard";
 import { useState } from "react";
 import {
@@ -105,8 +104,12 @@ export default function ProgressScreen() {
         />
       </View>
       <ProgressOverview dates={dates} period={period} />
-      <MilestoneNotice />
-      <Achievements />
+      <Button
+        label="View achievements"
+        secondary
+        icon="ribbon-outline"
+        onPress={() => router.push("/achievements")}
+      />
       <WeeklyReviewCard />
       <Button
         label={details ? "Hide details" : "View details and history"}

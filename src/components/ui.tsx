@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -48,13 +49,13 @@ export function IconBubble({
   amber?: boolean;
   size?: number;
 }) {
-  const { colors, premium } = useTheme();
+  const { colors } = useTheme();
   return (
     <View
       style={{
         width: size,
         height: size,
-        borderRadius: premium ? size / 2 : 0,
+        borderRadius: size / 2,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: amber ? colors.amberLight : colors.sage,
@@ -75,6 +76,7 @@ export function Button({
   icon,
   disabled,
   danger,
+  compact = false,
 }: {
   label: string;
   onPress: () => void | Promise<unknown>;
@@ -82,12 +84,13 @@ export function Button({
   icon?: IconName;
   disabled?: boolean;
   danger?: boolean;
+  compact?: boolean;
 }) {
   const { colors, premium } = useTheme();
   const styles = premium ? premiumStyles : classicStyles;
   const tone = danger ? colors.danger : colors.green;
   const foreground =
-    premium && !secondary && !danger ? "#FFFFFF" : danger ? tone : colors.text;
+    !secondary && !danger ? "#FFFFFF" : danger ? tone : colors.green;
   const pressedLock = useRef(false);
   const [pending, setPending] = useState(false);
   const inactive = disabled || pending;
@@ -110,10 +113,14 @@ export function Button({
       }}
       style={({ pressed }) => [
         styles.button,
+        compact && { minHeight: 48, paddingHorizontal: 12, paddingVertical: 8 },
         {
-          backgroundColor:
-            secondary || (premium && danger) ? colors.card : colors.button,
-          borderColor: danger ? tone : colors.buttonBorder,
+          backgroundColor: secondary || danger ? colors.card : colors.button,
+          borderColor: danger
+            ? tone
+            : secondary
+              ? colors.border
+              : colors.buttonBorder,
           opacity: inactive ? 0.45 : pressed ? 0.75 : 1,
         },
       ]}
@@ -253,13 +260,28 @@ export function Screen({
   form = false,
   scrollRef,
   compact = false,
+  floatingAction,
 }: React.PropsWithChildren<{
   form?: boolean;
   scrollRef?: React.Ref<ScrollView>;
   compact?: boolean;
+  floatingAction?: React.ReactNode;
 }>) {
   const { colors, premium } = useTheme();
-  const { timer } = useLocalFeatures();
+  const { timer, timerDockHeight } = useLocalFeatures();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () =>
+      setKeyboardOpen(true),
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardOpen(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const styles = premium ? premiumStyles : classicStyles;
   return (
     <SafeAreaView
@@ -277,12 +299,28 @@ export function Screen({
           keyboardDismissMode="on-drag"
           contentContainerStyle={[
             styles.content,
-            compact && { gap: 14 },
-            timer && { paddingBottom: 150 },
+            compact && { gap: 12, padding: 16 },
+            !!floatingAction && { paddingBottom: 104 },
+            timer && {
+              paddingBottom: timerDockHeight + (floatingAction ? 120 : 40),
+            },
           ]}
         >
           {children}
         </ScrollView>
+        {floatingAction && !keyboardOpen && (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: "absolute",
+              bottom: timer ? timerDockHeight + 28 : 16,
+              right: 20,
+              maxWidth: "90%",
+            }}
+          >
+            {floatingAction}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -394,9 +432,9 @@ export function ProgressRing({
   percent: number;
   size?: number;
 }) {
-  const { colors, ui, premium } = useTheme();
+  const { colors, ui } = useTheme();
   const safePercent = Math.min(100, Math.max(0, percent));
-  if (premium) {
+  {
     const radius = (size - 10) / 2;
     const circumference = 2 * Math.PI * radius;
     return (
@@ -437,31 +475,6 @@ export function ProgressRing({
       </View>
     );
   }
-  return (
-    <View
-      accessibilityRole="progressbar"
-      accessibilityLabel={`${percent}% completed`}
-      accessibilityValue={{ min: 0, max: 100, now: percent }}
-      style={{
-        width: size,
-        minHeight: 48,
-        gap: 6,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Text style={ui.heading}>{percent}%</Text>
-      <View style={{ height: 8, width: "100%", backgroundColor: colors.track }}>
-        <View
-          style={{
-            height: 8,
-            width: `${Math.min(100, Math.max(0, percent))}%`,
-            backgroundColor: colors.green,
-          }}
-        />
-      </View>
-    </View>
-  );
 }
 export function DateStrip({
   value,
@@ -574,7 +587,7 @@ export function TimeField({
 const createStyles = (colors: Palette, premium: boolean) =>
   StyleSheet.create({
     content: {
-      padding: premium ? 20 : 12,
+      padding: 20,
       paddingBottom: 24,
       gap: 14,
       width: "100%",
@@ -583,17 +596,15 @@ const createStyles = (colors: Palette, premium: boolean) =>
     },
     header: {
       backgroundColor: colors.toolbar,
-      marginHorizontal: premium ? 0 : -12,
-      marginTop: premium ? 0 : -12,
-      paddingHorizontal: premium ? 0 : 12,
-      paddingVertical: premium ? 4 : 12,
+
+      paddingVertical: 4,
       minHeight: 60,
       justifyContent: "center",
       gap: 4,
     },
     button: {
       minHeight: 52,
-      borderRadius: premium ? 16 : 2,
+      borderRadius: 14,
       paddingHorizontal: 16,
       paddingVertical: 14,
       borderWidth: 1,
@@ -611,7 +622,7 @@ const createStyles = (colors: Palette, premium: boolean) =>
     iconButton: {
       minWidth: 48,
       minHeight: 48,
-      borderRadius: premium ? 24 : 2,
+      borderRadius: 24,
       backgroundColor: colors.sage,
       alignItems: "center",
       justifyContent: "center",
@@ -620,22 +631,23 @@ const createStyles = (colors: Palette, premium: boolean) =>
       minHeight: 48,
       paddingHorizontal: 13,
       paddingVertical: 10,
-      borderRadius: premium ? 24 : 2,
+      borderRadius: 24,
       borderWidth: 1,
       justifyContent: "center",
       alignItems: "center",
     },
     segment: {
       flexDirection: "row",
-      backgroundColor: premium ? colors.sage : colors.button,
-      borderRadius: premium ? 16 : 0,
+      backgroundColor: colors.sage,
+      borderRadius: 16,
+      padding: 4,
       borderWidth: 1,
-      borderColor: colors.buttonBorder,
+      borderColor: colors.border,
     },
     segmentItem: {
       flex: 1,
       minHeight: 48,
-      borderRadius: premium ? 14 : 0,
+      borderRadius: 12,
       paddingHorizontal: 5,
       paddingVertical: 10,
       justifyContent: "center",
@@ -643,8 +655,8 @@ const createStyles = (colors: Palette, premium: boolean) =>
     date: {
       flex: 1,
       minHeight: 68,
-      borderRadius: premium ? 28 : 0,
-      borderWidth: premium ? 0 : 1,
+      borderRadius: premium ? 24 : 16,
+      borderWidth: 0,
       borderColor: colors.border,
       justifyContent: "center",
       alignItems: "center",
