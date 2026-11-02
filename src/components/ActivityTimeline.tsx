@@ -9,7 +9,7 @@ import {
 } from "../presentation/activity";
 import { useTracker } from "../state/TrackerProvider";
 import { useTheme } from "../theme";
-import { addDays, longDate } from "../utils/dates";
+import { addDays, longDate, shortDate } from "../utils/dates";
 import { Button, Chip, Icon, type IconName } from "./ui";
 import { Sheet } from "./Sheet";
 const kindIcon: Record<ActivityKind, IconName> = {
@@ -17,11 +17,12 @@ const kindIcon: Record<ActivityKind, IconName> = {
   routine: "list-outline",
   note: "document-text-outline",
 };
-export function ActivityTimeline() {
+export function ActivityTimeline({ compact = false }: { compact?: boolean }) {
   const { state, today, setSelectedDate } = useTracker();
   const { ui, colors } = useTheme();
   const [filter, setFilter] = useState<"all" | ActivityKind>("all");
   const [limit, setLimit] = useState(8);
+  const [expanded, setExpanded] = useState(false);
   const [routineSession, setRoutineSession] = useState<string>();
   const session = state.sessions.find((s) => s.id === routineSession);
   const routine = state.routines.find((r) => r.id === session?.routineId);
@@ -45,137 +46,224 @@ export function ActivityTimeline() {
   }
   return (
     <View style={{ gap: 14 }}>
-      <Text accessibilityRole="header" style={ui.heading}>
-        Your activity
-      </Text>
-      <Text style={ui.small}>
-        Habits and routines are grouped by their scheduled day. Notes use their
-        latest saved day.
-      </Text>
-      <View style={[ui.row, { flexWrap: "wrap" }]}>
-        {(
-          [
-            { value: "all", label: "All" },
-            { value: "habit", label: "Habits" },
-            { value: "routine", label: "Routines" },
-            { value: "note", label: "Notes" },
-          ] as const
-        ).map((f) => (
-          <Chip
-            key={f.value}
-            label={f.label}
-            accessibilityLabel={`Activity filter: ${f.label}`}
-            selected={filter === f.value}
-            onPress={() => {
-              setFilter(f.value);
-              setLimit(8);
-            }}
-          />
-        ))}
-      </View>
-      {!filtered.length && (
-        <View style={ui.sageCard}>
-          <Icon name="leaf-outline" />
-          <Text style={ui.heading}>
-            {filter === "all"
-              ? "Your story starts with a small step"
-              : `No ${filter === "habit" ? "habit activity" : filter === "routine" ? "routine activity" : "notes"} yet`}
+      {compact && !expanded ? (
+        <View style={ui.card}>
+          <Text accessibilityRole="header" style={ui.heading}>
+            Recent activity
           </Text>
-          <Text style={ui.body}>
-            Your recorded progress will find a place here as you go.
-          </Text>
-          {filter === "all" && (
-            <Button
-              label="Choose a habit for today"
-              secondary
-              onPress={() => {
-                setSelectedDate(today);
-                router.navigate("/");
-              }}
-            />
+          {!all.length && (
+            <Text style={ui.small}>
+              Your recorded habits and routines will appear here as you go.
+            </Text>
           )}
-        </View>
-      )}
-      {groups.map((group) => (
-        <View key={group.date} style={{ gap: 8 }}>
-          <Text
-            accessibilityRole="header"
-            style={[ui.label, { color: colors.muted }]}
-          >
-            {group.date === today
-              ? "Today"
-              : group.date === addDays(today, -1)
-                ? "Yesterday"
-                : longDate(group.date)}
-            {group.date.slice(0, 4) !== today.slice(0, 4)
-              ? `, ${group.date.slice(0, 4)}`
-              : ""}
-          </Text>
-          {group.items.map((item) => (
+          {all.slice(0, 2).map((item) => (
             <Pressable
               key={item.id}
               accessibilityRole="button"
-              accessibilityLabel={`${item.title}. ${item.detail}. ${item.date}. Open ${item.kind === "note" ? "note" : item.kind === "routine" ? "routine" : "habit details"}`}
+              accessibilityLabel={
+                item.title + ". " + item.detail + ". Open activity"
+              }
               onPress={() => open(item)}
               style={[
                 ui.row,
                 {
                   minHeight: 64,
-                  alignItems: "flex-start",
-                  paddingVertical: 12,
                   borderBottomWidth: 1,
                   borderColor: colors.border,
+                  paddingVertical: 8,
                 },
               ]}
             >
               <View
                 style={{
-                  width: 36,
-                  minHeight: 36,
-                  borderRadius: 18,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor:
+                    item.status === "completed" ? colors.green : colors.sage,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor:
-                    item.status === "completed"
-                      ? colors.sage
-                      : colors.background,
                 }}
               >
                 <Icon
                   name={
-                    item.status === "skipped"
-                      ? "remove-circle-outline"
-                      : item.status === "partial"
-                        ? "pie-chart-outline"
+                    item.status === "completed"
+                      ? "checkmark"
+                      : item.status === "skipped"
+                        ? "remove-outline"
                         : kindIcon[item.kind]
                   }
-                  size={22}
                   color={
-                    item.status === "completed" ? colors.green : colors.muted
+                    item.status === "completed" ? colors.onAccent : colors.green
                   }
+                  size={22}
                 />
               </View>
-              <View style={[ui.grow, { gap: 5 }]}>
+              <View style={[ui.grow, { gap: 4 }]}>
                 <Text style={ui.label}>{item.title}</Text>
-                <Text style={ui.small}>{item.detail}</Text>
+                <Text style={ui.small}>
+                  {item.date === today ? "Today" : shortDate(item.date)} ·{" "}
+                  {item.detail}
+                </Text>
               </View>
-              <Icon name="chevron-forward" size={18} color={colors.muted} />
+              <Icon name="chevron-forward" size={16} color={colors.muted} />
             </Pressable>
           ))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="View all activity"
+            onPress={() => setExpanded(true)}
+            style={{ minHeight: 48, justifyContent: "center" }}
+          >
+            <Text style={[ui.label, { color: colors.green }]}>
+              View all activity
+            </Text>
+          </Pressable>
         </View>
-      ))}
-      {filtered.length > 0 && (
-        <Text style={ui.small}>
-          Showing {Math.min(limit, filtered.length)} of {filtered.length}{" "}
-          {filtered.length === 1 ? "activity" : "activities"}
-        </Text>
-      )}
-      {filtered.length > limit && (
-        <Button
-          label="Show more activity"
-          secondary
-          onPress={() => setLimit((n) => n + 8)}
-        />
+      ) : (
+        <>
+          {compact && (
+            <Button
+              label="Show recent activity"
+              secondary
+              onPress={() => setExpanded(false)}
+            />
+          )}
+          <Text accessibilityRole="header" style={ui.heading}>
+            Your activity
+          </Text>
+          <Text style={ui.small}>
+            Habits and routines are grouped by their scheduled day. Notes use
+            their latest saved day.
+          </Text>
+          <View style={[ui.row, { flexWrap: "wrap" }]}>
+            {(
+              [
+                { value: "all", label: "All" },
+                { value: "habit", label: "Habits" },
+                { value: "routine", label: "Routines" },
+                { value: "note", label: "Notes" },
+              ] as const
+            ).map((f) => (
+              <Chip
+                key={f.value}
+                label={f.label}
+                accessibilityLabel={`Activity filter: ${f.label}`}
+                selected={filter === f.value}
+                onPress={() => {
+                  setFilter(f.value);
+                  setLimit(8);
+                }}
+              />
+            ))}
+          </View>
+          {!filtered.length && (
+            <View style={ui.sageCard}>
+              <Icon name="leaf-outline" />
+              <Text style={ui.heading}>
+                {filter === "all"
+                  ? "Your story starts with a small step"
+                  : `No ${filter === "habit" ? "habit activity" : filter === "routine" ? "routine activity" : "notes"} yet`}
+              </Text>
+              <Text style={ui.body}>
+                Your recorded progress will find a place here as you go.
+              </Text>
+              {filter === "all" && (
+                <Button
+                  label="Choose a habit for today"
+                  secondary
+                  onPress={() => {
+                    setSelectedDate(today);
+                    router.navigate("/");
+                  }}
+                />
+              )}
+            </View>
+          )}
+          {groups.map((group) => (
+            <View key={group.date} style={{ gap: 8 }}>
+              <Text
+                accessibilityRole="header"
+                style={[ui.label, { color: colors.muted }]}
+              >
+                {group.date === today
+                  ? "Today"
+                  : group.date === addDays(today, -1)
+                    ? "Yesterday"
+                    : longDate(group.date)}
+                {group.date.slice(0, 4) !== today.slice(0, 4)
+                  ? `, ${group.date.slice(0, 4)}`
+                  : ""}
+              </Text>
+              {group.items.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.title}. ${item.detail}. ${item.date}. Open ${item.kind === "note" ? "note" : item.kind === "routine" ? "routine" : "habit details"}`}
+                  onPress={() => open(item)}
+                  style={[
+                    ui.row,
+                    {
+                      minHeight: 64,
+                      alignItems: "flex-start",
+                      paddingVertical: 12,
+                      borderBottomWidth: 1,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      minHeight: 36,
+                      borderRadius: 18,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor:
+                        item.status === "completed"
+                          ? colors.sage
+                          : colors.background,
+                    }}
+                  >
+                    <Icon
+                      name={
+                        item.status === "skipped"
+                          ? "remove-circle-outline"
+                          : item.status === "partial"
+                            ? "pie-chart-outline"
+                            : kindIcon[item.kind]
+                      }
+                      size={22}
+                      color={
+                        item.status === "completed"
+                          ? colors.green
+                          : colors.muted
+                      }
+                    />
+                  </View>
+                  <View style={[ui.grow, { gap: 5 }]}>
+                    <Text style={ui.label}>{item.title}</Text>
+                    <Text style={ui.small}>{item.detail}</Text>
+                  </View>
+                  <Icon name="chevron-forward" size={18} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          ))}
+          {filtered.length > 0 && (
+            <Text style={ui.small}>
+              Showing {Math.min(limit, filtered.length)} of {filtered.length}{" "}
+              {filtered.length === 1 ? "activity" : "activities"}
+            </Text>
+          )}
+          {filtered.length > limit && (
+            <Button
+              label="Show more activity"
+              secondary
+              onPress={() => setLimit((n) => n + 8)}
+            />
+          )}
+        </>
       )}
       {session && (
         <Sheet

@@ -3,12 +3,23 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
-import { ActivityIndicator, AppState, View } from "react-native";
+import {
+  ActivityIndicator,
+  Appearance as NativeAppearance,
+  AppState,
+  Platform,
+  View,
+  useColorScheme,
+} from "react-native";
+import * as SystemUI from "expo-system-ui";
+import { isDarkMode, type ColorMode } from "../domain/colorMode";
+import { loadColorMode, saveColorMode } from "../storage/colorMode";
 import { trialStatus, type PremiumTrial } from "../domain/premiumTrial";
 import { premiumTrialStore } from "../storage/appearance";
-import { classicTheme, premiumTheme, ThemeContext } from "../theme";
+import { appTheme, ThemeContext } from "../theme";
 
 type Appearance = ReturnType<typeof trialStatus> & {
   trial: PremiumTrial | null;
@@ -16,10 +27,47 @@ type Appearance = ReturnType<typeof trialStatus> & {
   loading: boolean;
   startTrial: () => Promise<boolean>;
   refresh: () => Promise<boolean>;
+  colorMode: ColorMode;
+  setColorMode: (mode: ColorMode) => Promise<void>;
+  colorError: string;
+  retryColorMode: () => Promise<void>;
 };
 const Context = createContext<Appearance | null>(null);
 
 export function AppearanceProvider({ children }: React.PropsWithChildren) {
+  const system = useColorScheme();
+  const [colorMode, setMode] = useState<ColorMode>("system");
+  const [colorReady, setColorReady] = useState(false);
+  const [colorError, setColorError] = useState("");
+  const modeQueue = useRef<Promise<void>>(Promise.resolve());
+  const retryColorMode = useCallback(async () => {
+    try {
+      setMode(await loadColorMode());
+      setColorError("");
+    } catch (e) {
+      setColorError(
+        e instanceof Error ? e.message : "Could not read color theme.",
+      );
+    } finally {
+      setColorReady(true);
+    }
+  }, []);
+  useEffect(() => {
+    void Promise.resolve().then(retryColorMode);
+  }, [retryColorMode]);
+  const setColorMode = useCallback((mode: ColorMode) => {
+    const save = async () => {
+      try {
+        await saveColorMode(mode);
+        setMode(mode);
+        setColorError("");
+      } catch {
+        setColorError("Could not save your color theme. Please retry.");
+      }
+    };
+    modeQueue.current = modeQueue.current.then(save, save);
+    return modeQueue.current;
+  }, []);
   const [trial, setTrial] = useState<PremiumTrial | null>(null);
   const [now, setNow] = useState(Date.now);
   const [loading, setLoading] = useState(true);
@@ -64,6 +112,19 @@ export function AppearanceProvider({ children }: React.PropsWithChildren) {
   }, [status.active, status.remaining, now, loading, refresh]);
 
   const active = status.active && !error && !loading;
+  const theme = appTheme(active, isDarkMode(colorMode, system));
+  useEffect(() => {
+    if (Platform.OS !== "web")
+      NativeAppearance.setColorScheme(
+        colorMode === "system" ? "unspecified" : colorMode,
+      );
+  }, [colorMode]);
+  useEffect(() => {
+    if (Platform.OS !== "web")
+      void SystemUI.setBackgroundColorAsync(theme.colors.background).catch(
+        () => {},
+      );
+  }, [theme.colors.background]);
   return (
     <Context.Provider
       value={{
@@ -74,20 +135,24 @@ export function AppearanceProvider({ children }: React.PropsWithChildren) {
         loading,
         startTrial: () => refresh(true),
         refresh: () => refresh(),
+        colorMode,
+        setColorMode,
+        colorError,
+        retryColorMode,
       }}
     >
-      <ThemeContext.Provider value={active ? premiumTheme : classicTheme}>
-        {loading ? (
+      <ThemeContext.Provider value={theme}>
+        {loading || !colorReady ? (
           <View
             style={{
               flex: 1,
-              backgroundColor: classicTheme.colors.background,
+              backgroundColor: theme.colors.background,
               justifyContent: "center",
             }}
           >
             <ActivityIndicator
               accessibilityLabel="Loading appearance"
-              color={classicTheme.colors.green}
+              color={theme.colors.green}
             />
           </View>
         ) : (

@@ -11,6 +11,7 @@ import { Icon, IconBubble, IconButton } from "./ui";
 import { HabitActions, ProgressEditor } from "./HabitInteractions";
 import { useTracker } from "../state/TrackerProvider";
 import { organizationFor } from "../domain/organization";
+import { FeatureIcon } from "./TabCards";
 
 export function HabitCard({
   item,
@@ -26,7 +27,7 @@ export function HabitCard({
   const { colors, ui } = useTheme();
   const { fontScale, width } = useWindowDimensions();
   const narrow = width < 350;
-  const stackAction = fontScale > 1.25 || (schedule && width < 380);
+  const stackAction = fontScale > 1.25 || (schedule && width < 350);
   const actions = useEntryActions(item);
   const { state } = useTracker();
   const organization = organizationFor(state, item.habitId);
@@ -121,25 +122,38 @@ export function HabitCard({
         minWidth: 48,
         minHeight: 48,
         maxWidth: stackAction ? undefined : 92,
-        paddingHorizontal: kind === "boolean" ? 8 : 10,
+        paddingHorizontal: schedule || kind === "boolean" ? 8 : 10,
         paddingVertical: 10,
         borderRadius: 12,
         backgroundColor:
-          done || skipped || kind === "boolean" ? "transparent" : colors.sage,
+          schedule && kind === "duration" && !done && !skipped
+            ? colors.green
+            : done || skipped || kind === "boolean"
+              ? "transparent"
+              : colors.sage,
         alignItems: "center",
         justifyContent: "center",
         flexDirection: "row",
-        gap: 8,
+        gap: schedule ? 4 : 8,
         opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
       })}
     >
       {kind === "boolean" && !done && !skipped ? (
         <Icon name="square-outline" color={colors.green} size={27} />
       ) : null}
-      {(kind !== "boolean" || done || skipped) && (
+      {schedule && done ? (
+        <Icon name="checkmark" color={colors.green} size={26} />
+      ) : null}
+      {schedule && kind === "duration" && !done && !skipped && (
+        <Icon name="play" size={16} color={colors.onAccent} />
+      )}
+      {(kind !== "boolean" || done || skipped) && !(schedule && done) && (
         <Text
           style={{
-            color: colors.green,
+            color:
+              schedule && kind === "duration" && !done && !skipped
+                ? colors.onAccent
+                : colors.green,
             fontSize: 14,
             fontWeight: "700",
             flexShrink: 1,
@@ -156,7 +170,7 @@ export function HabitCard({
       style={[
         ui.card,
         {
-          padding: narrow ? 10 : 12,
+          padding: schedule ? 8 : narrow ? 10 : 12,
           gap: 6,
           backgroundColor: colors.card,
           borderColor: focus ? colors.sageDark : colors.border,
@@ -171,16 +185,17 @@ export function HabitCard({
               ? "Focus paused"
               : "Focus in progress"
             : "Up next"}
-          {item.time ? " · " + formatTime(item.time) : ""}
+          {!schedule && item.time ? " · " + formatTime(item.time) : ""}
         </Text>
       )}
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: narrow ? 6 : 8,
+          gap: schedule ? 4 : narrow ? 6 : 8,
         }}
       >
+        {schedule && <FeatureIcon name={item.habit.icon} size={28} />}
         {!schedule && (
           <IconBubble name={item.habit.icon} size={narrow ? 28 : 32} />
         )}
@@ -203,25 +218,33 @@ export function HabitCard({
           <Text
             style={{
               color: foreground,
-              fontSize: 16,
+              fontSize: schedule ? 15 : 16,
               fontWeight: "600",
-              lineHeight: 22,
+              lineHeight: schedule ? 20 : 22,
             }}
           >
             {item.habit.name}
           </Text>
           <Text style={{ color: secondary, fontSize: 12, lineHeight: 18 }}>
-            {focus && amountGoal
-              ? `${item.amount}/${target} ${item.habit.goal.unit}`
-              : formatTime(item.time) +
-                (amountGoal
-                  ? " · " +
-                    item.amount +
-                    "/" +
-                    target +
-                    " " +
-                    item.habit.goal.unit
-                  : "")}
+            {schedule
+              ? amountGoal
+                ? kind === "count"
+                  ? `${item.amount} of ${target} ${item.habit.goal.unit}`
+                  : `${item.amount > 0 && !done ? `${item.amount} of ` : ""}${target} ${item.habit.goal.unit}`
+                : done
+                  ? "Completed"
+                  : "Daily habit"
+              : focus && amountGoal
+                ? `${item.amount}/${target} ${item.habit.goal.unit}`
+                : formatTime(item.time) +
+                  (amountGoal
+                    ? " · " +
+                      item.amount +
+                      "/" +
+                      target +
+                      " " +
+                      item.habit.goal.unit
+                    : "")}
           </Text>
           {(organization.pinned || organization.priority !== "normal") && (
             <Text style={{ color: secondary, fontSize: 12 }}>
@@ -229,14 +252,14 @@ export function HabitCard({
               {organization.priority} priority
             </Text>
           )}
-          {(done ||
+          {((done && (!schedule || item.busy)) ||
             skipped ||
             item.date > actions.today ||
             item.displayStatus === "missed" ||
             actions.access.hasNote ||
             item.rescheduled ||
             item.paused ||
-            schedule) && (
+            (schedule && item.status !== "pending" && !done)) && (
             <Text
               style={{
                 color:
@@ -264,39 +287,42 @@ export function HabitCard({
           onPress={() => setMenu(true)}
         />
       </View>
-      {amountGoal && !done && !skipped && (
-        <View
-          accessibilityRole="progressbar"
-          accessibilityLabel={
-            item.habit.name +
-            ": " +
-            item.amount +
-            " of " +
-            target +
-            " " +
-            item.habit.goal.unit
-          }
-          accessibilityValue={{
-            min: 0,
-            max: target,
-            now: Math.min(target, item.amount),
-          }}
-          style={{
-            height: 3,
-            borderRadius: 2,
-            backgroundColor: colors.track,
-            overflow: "hidden",
-          }}
-        >
+      {amountGoal &&
+        !done &&
+        !skipped &&
+        !(schedule && kind === "duration" && item.amount === 0) && (
           <View
+            accessibilityRole="progressbar"
+            accessibilityLabel={
+              item.habit.name +
+              ": " +
+              item.amount +
+              " of " +
+              target +
+              " " +
+              item.habit.goal.unit
+            }
+            accessibilityValue={{
+              min: 0,
+              max: target,
+              now: Math.min(target, item.amount),
+            }}
             style={{
               height: 3,
-              width: `${Math.min(100, (item.amount / target) * 100)}%`,
-              backgroundColor: colors.green,
+              borderRadius: 2,
+              backgroundColor: colors.track,
+              overflow: "hidden",
             }}
-          />
-        </View>
-      )}
+          >
+            <View
+              style={{
+                height: 3,
+                width: `${Math.min(100, (item.amount / target) * 100)}%`,
+                backgroundColor: colors.green,
+              }}
+            />
+          </View>
+        )}
       {stackAction && primaryAction}
       {menu && (
         <HabitActions

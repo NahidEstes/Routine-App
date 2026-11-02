@@ -466,7 +466,7 @@ test("format 1 backups load feature defaults; format 2 validates references and 
     parseBackup(JSON.stringify(b)).data.features,
     defaultFeatures(),
   );
-  assert.equal(parseBackup(JSON.stringify(b)).formatVersion, 2);
+  assert.equal(parseBackup(JSON.stringify(b)).formatVersion, 3);
   b.formatVersion = 2;
   assert.throws(() => parseBackup(JSON.stringify(b)), /missing feature/);
   let s = pause(seeded());

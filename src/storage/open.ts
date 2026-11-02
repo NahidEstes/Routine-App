@@ -12,7 +12,7 @@ export function openRepository() {
         runAsync: (sql, ...params) => db.runAsync(sql, ...params),
         getAllAsync: (sql, ...params) => db.getAllAsync(sql, ...params),
         // This private connection has no concurrent queries: writes are queued by
-        // TrackerProvider. Keeping one connection preserves its foreign-key PRAGMA.
+        // the shared trackerChannel (app + widget). One connection preserves its foreign-key PRAGMA.
         transaction: (task) => db.withTransactionAsync(() => task(db)),
       };
       const result = new TrackerRepository(adapter);

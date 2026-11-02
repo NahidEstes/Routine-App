@@ -9,6 +9,7 @@ import {
 import { clone } from "../utils/clone";
 import { applyPlanningAction, type PlanningAction } from "./planningActions";
 import { isPaused } from "./organization";
+import { applyChallengeAction, type ChallengeAction } from "./challenges";
 import {
   activeOn,
   entriesForDate,
@@ -21,6 +22,7 @@ import {
 } from "./schedule";
 
 export type Action =
+  | ChallengeAction
   | PlanningAction
   | {
       type: "saveNote";
@@ -190,6 +192,9 @@ export function applyAction(
 ): TrackerState {
   let state = materialize(input, today);
   switch (action.type) {
+    case "saveChallenge":
+    case "archiveChallenge":
+      return applyChallengeAction(state, action, today);
     case "pauseHabits":
     case "resumePause":
     case "organizeHabit":

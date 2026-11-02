@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { AppState, Pressable, Text, View } from "react-native";
+import {
+  AppState,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { elapsedTime, timerDisplay } from "../domain/focusTimer";
 import { useLocalFeatures } from "../state/LocalFeaturesProvider";
@@ -7,6 +13,7 @@ import { useTracker } from "../state/TrackerProvider";
 import { useTheme } from "../theme";
 import { Button, Field, Icon } from "./ui";
 import { Sheet } from "./Sheet";
+import { tabBarMetrics } from "../presentation/tabBar";
 
 export function FocusTimerDock() {
   const { error: progressError } = useTracker();
@@ -29,6 +36,7 @@ export function FocusTimerDock() {
   const [discarding, setDiscarding] = useState(false);
   const [minutes, setMinutes] = useState("");
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   useEffect(() => {
     if (!timer || timer.runningSince === null) return;
     const tick = () => setNow(Date.now());
@@ -65,7 +73,7 @@ export function FocusTimerDock() {
           ui.between,
           {
             position: "absolute",
-            bottom: 78 + insets.bottom,
+            bottom: tabBarMetrics(fontScale, insets.bottom).reserved + 8,
             left: 12,
             right: 12,
             maxWidth: 640,

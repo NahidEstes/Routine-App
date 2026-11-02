@@ -92,7 +92,7 @@ export default function Today() {
     );
   }
   return (
-    <Screen compact floatingAction={<AddHabitButton />}>
+    <Screen tab compact floatingAction={<AddHabitButton />}>
       <Header
         title={selectedDate === today ? "Today" : "Your day"}
         subtitle={longDate(selectedDate)}
@@ -305,6 +305,7 @@ export default function Today() {
         </View>
       )}
       <WeeklySection date={selectedDate} onReschedule={setReschedule} />
+      <Button label="Your challenges" secondary icon="flag-outline" onPress={() => router.push("/challenges")} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Browse routines"

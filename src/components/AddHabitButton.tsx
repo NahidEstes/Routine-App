@@ -3,7 +3,13 @@ import { router } from "expo-router";
 import { useTheme } from "../theme";
 import { Icon } from "./ui";
 
-export function AddHabitButton({ scheduled = false }: { scheduled?: boolean }) {
+export function AddHabitButton({
+  scheduled = false,
+  fullWidth = false,
+}: {
+  scheduled?: boolean;
+  fullWidth?: boolean;
+}) {
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
   return (
@@ -19,6 +25,7 @@ export function AddHabitButton({ scheduled = false }: { scheduled?: boolean }) {
         minHeight: 54,
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         gap: 8,
         backgroundColor: colors.green,
         paddingHorizontal: 18,
@@ -32,11 +39,11 @@ export function AddHabitButton({ scheduled = false }: { scheduled?: boolean }) {
         opacity: pressed ? 0.8 : 1,
       })}
     >
-      <Icon name="add" size={24} color="#FFFFFF" />
-      {fontScale <= 1.4 && (
+      <Icon name="add" size={24} color={colors.onAccent} />
+      {(fullWidth || fontScale <= 1.4) && (
         <Text
           style={{
-            color: "#FFFFFF",
+            color: colors.onAccent,
             fontSize: 15,
             fontWeight: "600",
             flexShrink: 1,

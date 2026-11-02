@@ -2,6 +2,8 @@ import type { Habit, HabitFeatures, TrackerState } from "../models/types";
 
 export function defaultFeatures(): HabitFeatures {
   return {
+    challenges: [],
+    seenChallengeWins: [],
     pauses: [],
     organization: [],
     order: [],

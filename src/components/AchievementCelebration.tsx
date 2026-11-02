@@ -19,7 +19,7 @@ import { Icon, IconButton } from "./ui";
 
 /** One global, non-blocking celebration; eligibility/acknowledgement stay in TrackerProvider. */
 export function AchievementCelebration() {
-  const { achievementNotice, dismissAchievements } = useTracker();
+  const { achievementNotice, dismissAchievements, state } = useTracker();
   const { preferences, preferencesReady } = useLocalFeatures();
   const { colors, ui } = useTheme();
   const insets = useSafeAreaInsets();
@@ -91,11 +91,23 @@ export function AchievementCelebration() {
       if (timer) clearTimeout(timer);
     };
   }, [enabled, noticeKey, reader, dismissAchievements]);
+  const challengeWins = (state.features.challenges ?? []).filter((c) =>
+    achievementNotice.includes(`challenge:${c.id}`),
+  );
   const badges = achievementDefinitions.filter((b) =>
     achievementNotice.includes(b.id),
   );
-  if (!enabled || !badges.length) return null;
-  const badge = badges[0];
+  if (!enabled || (!badges.length && !challengeWins.length)) return null;
+  const win = challengeWins[0];
+  const badge = win
+    ? {
+        ...achievementDefinitions.find((b) => b.id === "challenge")!,
+        name: win.name,
+      }
+    : badges[0];
+  const count =
+    challengeWins.length +
+    badges.filter((b) => !(win && b.id === "challenge")).length;
   return (
     <View
       pointerEvents="box-none"
@@ -143,7 +155,7 @@ export function AchievementCelebration() {
             </Text>
             <Text style={ui.heading}>
               {badge.name}
-              {badges.length > 1 ? ` +${badges.length - 1}` : ""}
+              {count > 1 ? ` +${count - 1}` : ""}
             </Text>
           </View>
           <IconButton
@@ -158,10 +170,16 @@ export function AchievementCelebration() {
           accessibilityLabel="View newly earned achievements"
           onPress={() => {
             dismissAchievements();
-            router.push({
-              pathname: "/achievements",
-              params: { badge: badge.id },
-            });
+            if (win)
+              router.push({
+                pathname: "/challenges",
+                params: { challenge: win.id },
+              });
+            else
+              router.push({
+                pathname: "/achievements",
+                params: { badge: badge.id },
+              });
           }}
           style={{
             minHeight: 48,

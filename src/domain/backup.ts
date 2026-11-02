@@ -1,11 +1,12 @@
-import type { TrackerState } from "../models/types";
+import type { TrackerState, HabitChallenge } from "../models/types";
 import { daysApart, validDate, validTime, weekDates } from "../utils/dates";
 import { clone } from "../utils/clone";
 import { materialize } from "./schedule";
 import { defaultFeatures } from "./organization";
 import { achievementDefinitions } from "./achievements";
+import { validateChallenge } from "./challenges";
 
-export const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 3;
 export const MAX_BACKUP_BYTES = 20 * 1024 * 1024;
 export const NOTE_LIMIT = 2000;
 function utf8Size(value: string) {
@@ -18,7 +19,7 @@ function utf8Size(value: string) {
 }
 export interface Backup {
   format: "routine-app-backup";
-  formatVersion: 2;
+  formatVersion: 3;
   exportedAt: string;
   appVersion: string;
   data: TrackerState;
@@ -214,7 +215,7 @@ export function validateBackup(value: unknown): Backup {
     "data",
   ]);
   if (b.format !== "routine-app-backup") fail("file format");
-  if (b.formatVersion !== 1 && b.formatVersion !== BACKUP_VERSION)
+  if (![1, 2, BACKUP_VERSION].includes(b.formatVersion as number))
     throw new Error(
       "Unsupported backup version. Use an app that supports this file; current data is unchanged.",
     );
@@ -235,7 +236,7 @@ export function validateBackup(value: unknown): Backup {
     ],
     ["features"],
   );
-  if (b.formatVersion === 2 && !d.features) fail("missing feature data");
+  if (b.formatVersion !== 1 && !d.features) fail("missing feature data");
   const hs = array(d.habits, "habits").map((h) => habit(h, "habit"));
   unique(
     hs.map((h) => h.id),
@@ -457,18 +458,55 @@ export function validateBackup(value: unknown): Backup {
   });
 }
 function validateFeatures(value: unknown, habitIds: Set<unknown>) {
-  const f = obj(value, "feature data", [
-    "pauses",
-    "organization",
-    "order",
-    "sort",
-    "search",
-    "priorityFilter",
-    "typeFilter",
-    "reviews",
-    "seenAchievements",
-    "dismissedReviewWeeks",
-  ]);
+  const f = obj(
+    value,
+    "feature data",
+    [
+      "pauses",
+      "organization",
+      "order",
+      "sort",
+      "search",
+      "priorityFilter",
+      "typeFilter",
+      "reviews",
+      "seenAchievements",
+      "dismissedReviewWeeks",
+    ],
+    ["challenges", "seenChallengeWins"],
+  );
+  const challenges = array(f.challenges ?? [], "challenges");
+  challenges.forEach((value) => {
+    const c = obj(
+      value,
+      "challenge",
+      ["id", "name", "habitId", "habitName", "start", "end", "target"],
+      ["archived"],
+    );
+    id(c.id, "challenge ID");
+    text(c.habitName, "challenge habit name", 60);
+    if (!habitIds.has(c.habitId)) fail("challenge habit relationship");
+    try {
+      validateChallenge(c as unknown as HabitChallenge);
+    } catch {
+      fail("challenge values");
+    }
+  });
+  unique(
+    challenges.map((c) => (c as HabitChallenge).id),
+    "challenge IDs",
+  );
+  const seenChallengeWins = array(
+    f.seenChallengeWins ?? [],
+    "celebrated challenges",
+  );
+  unique(seenChallengeWins, "celebrated challenges");
+  if (
+    seenChallengeWins.some(
+      (id) => !challenges.some((c) => (c as HabitChallenge).id === id),
+    )
+  )
+    fail("celebrated challenge relationship");
   one(f.sort, ["time", "priority", "custom"], "habit sort");
   text(f.search, "habit search", 60, false);
   one(f.priorityFilter, ["all", "high", "normal", "low"], "priority filter");
@@ -545,7 +583,11 @@ function validateFeatures(value: unknown, habitIds: Set<unknown>) {
     date(w, "review prompt week");
     if (weekDates(w as string)[0] !== w) fail("review prompt week start");
   });
-  return value as TrackerState["features"];
+  return {
+    ...(value as TrackerState["features"]),
+    challenges: challenges as HabitChallenge[],
+    seenChallengeWins: seenChallengeWins as string[],
+  };
 }
 export function parseBackup(json: string): Backup {
   if (json.length > MAX_BACKUP_BYTES || utf8Size(json) > MAX_BACKUP_BYTES)
@@ -569,7 +611,7 @@ export function createBackup(
       format: "routine-app-backup",
       formatVersion: BACKUP_VERSION,
       exportedAt,
-      appVersion: "1.0.0",
+      appVersion: "1.0.2",
       data: state,
     }),
   );
@@ -599,5 +641,6 @@ export function backupCounts(backup: Backup) {
     "Busy days": d.busyDates.length,
     "Pause periods": d.features.pauses.length,
     "Weekly reviews": d.features.reviews.length,
+    Challenges: (d.features.challenges ?? []).length,
   };
 }

@@ -1,6 +1,12 @@
 # Steady · Daily Routine & Habit Tracker
 
+The [New habit Quick start update](docs/QUICK-START-2026-11-02.md) adds icon template cards, clear selection and a See all picker, with editable drafts and the approved reading/walking starter goals.
+
+The [Soft Sage tab redesign](docs/SOFT-SAGE-TABS-2026-11-02.md) implements the approved Schedule, Progress and Profile concepts with shared floating navigation, live charts, responsive habit cards and local profile activity. Browser screenshots and Android JavaScript export results are included in the implementation notes.
+
 TypeScript + React Native + Expo SDK 57. Android is the product target, with an optional SQLite-backed browser preview.
+
+The project is linked to the personal Expo account [`nahidmohammed213`](https://expo.dev/accounts/nahidmohammed213/projects/steady-routine). See [account connection and signing notes](docs/EXPO-ACCOUNT-2026-10-29.md). No build was started when changing accounts.
 
 Phase 2 and Phase 3 add real local habit/routine management, repeat schedules, progress recording, reschedule overrides, SQLite persistence, history and progress to the existing Phase 1 UI.
 
@@ -17,6 +23,8 @@ The [October 19 usability update](docs/USABILITY-2026-10-19.md) adds consistent 
 The [Profile and Achievements update](docs/PROFILE-ACHIEVEMENTS-2026-10-22.md) adds a device-local profile, weekly activity summary, filterable activity timeline, badge collection/details and a small optional celebration. Settings now opens inside Profile. Existing tracker storage, backups and achievement rules are unchanged. No APK was built for this update.
 
 The [Modern Minimal Today update](docs/TODAY-MODERN-2026-10-24.md) continues the interrupted design work with compact cards, a smaller Up next highlight, calendar/week selection and an always-available Add habit button. Existing data, timer accounting, repeat rules and Classic/Premium trial behavior are preserved. No APK was built.
+
+The [October 27 update](docs/CHALLENGES-WIDGET-DARK-2026-10-27.md) adds personal Challenges, four evidence-based badges and per-challenge celebrations, System/Light/Dark appearance, and Android home-screen widget code with a live in-app preview. Backup format 3 includes challenges and still reads formats 1 and 2. No APK/native build was started; the widget needs a later build and is unavailable in Expo Go or the existing 1.0.2 APK.
 
 ```powershell
 npm ci

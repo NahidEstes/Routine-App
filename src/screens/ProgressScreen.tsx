@@ -1,13 +1,13 @@
-import { ProgressOverview } from "../components/ProgressOverview";
-import { WeeklyReviewCard } from "../components/WeeklyReviewCard";
-import { useState } from "react";
 import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+  PeriodComparison,
+  ProgressHighlights,
+  ProgressOverview,
+} from "../components/ProgressOverview";
+import { DailyCompletionChart } from "../components/DailyCompletionChart";
+import { TabRow } from "../components/TabCards";
+import { WeeklyReviewCard } from "../components/WeeklyReviewCard";
+import { useMemo, useState } from "react";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import {
   Button,
@@ -29,7 +29,6 @@ import {
 } from "../domain/progress";
 import {
   addDays,
-  DAY_NAMES,
   monthDates,
   parseDate,
   shortDate,
@@ -44,19 +43,28 @@ export default function ProgressScreen() {
   const stackSummary = width < 450 && fontScale > 1.3;
   const [details, setDetails] = useState(false);
   const [period, setPeriod] = useState<"week" | "month">("week");
-  const [allHistory, setAllHistory] = useState(false),
-    [focus, setFocus] = useState<string | null>(null);
-  const chartDates =
-    period === "week" ? weekDates(selectedDate) : monthDates(selectedDate);
-  const dates = chartDates.filter((d) => d <= today),
+  const [allHistory, setAllHistory] = useState(false);
+  const chartDates = useMemo(
+    () =>
+      period === "week" ? weekDates(selectedDate) : monthDates(selectedDate),
+    [period, selectedDate],
+  );
+  const dates = useMemo(
+      () => chartDates.filter((d) => d <= today),
+      [chartDates, today],
+    ),
     stats = completion(state, dates, today),
     plans = periodWeeklyPlans(state, dates, today);
-  const habits = state.habits.filter(
-    (h) => habitConsistency(state, h.id, dates, today).total > 0,
-  );
-  const history = [...dates]
-    .reverse()
-    .filter((d) => itemsForDate(state, d, today).some((e) => !e.optional));
+  const habits = details
+    ? state.habits.filter(
+        (h) => habitConsistency(state, h.id, dates, today).total > 0,
+      )
+    : [];
+  const history = details
+    ? [...dates]
+        .reverse()
+        .filter((d) => itemsForDate(state, d, today).some((e) => !e.optional))
+    : [];
   function move(delta: number) {
     if (period === "week") setSelectedDate(addDays(selectedDate, delta * 7));
     else {
@@ -67,10 +75,9 @@ export default function ProgressScreen() {
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
       );
     }
-    setFocus(null);
   }
   return (
-    <Screen>
+    <Screen tab>
       <Header title="Progress" subtitle="See how your small steps add up." />
       <Segment
         options={[
@@ -80,7 +87,6 @@ export default function ProgressScreen() {
         value={period}
         onChange={(v) => {
           setPeriod(v);
-          setFocus(null);
         }}
       />
       <View style={ui.between}>
@@ -104,18 +110,25 @@ export default function ProgressScreen() {
         />
       </View>
       <ProgressOverview dates={dates} period={period} />
-      <Button
+      <DailyCompletionChart
+        key={`${period}:${chartDates[0]}`}
+        dates={chartDates}
+        period={period}
+      />
+      <ProgressHighlights dates={dates} period={period} />
+      <TabRow
+        label={
+          details ? "Hide details and history" : "View details and history"
+        }
+        icon="document-text-outline"
+        onPress={() => setDetails(!details)}
+      />
+      <TabRow
         label="View achievements"
-        secondary
         icon="ribbon-outline"
         onPress={() => router.push("/achievements")}
       />
       <WeeklyReviewCard />
-      <Button
-        label={details ? "Hide details" : "View details and history"}
-        secondary
-        onPress={() => setDetails(!details)}
-      />
       {details && (
         <>
           <View style={[ui.card, { gap: 12 }]}>
@@ -169,90 +182,7 @@ export default function ProgressScreen() {
               onPress={() => router.push("/habit")}
             />
           )}
-          {!!stats.total && (
-            <View style={ui.card}>
-              <Text style={ui.heading}>Daily completion</Text>
-              <Text style={ui.small}>
-                Daily habits only; the chart and summary use the same records.
-                Future and unscheduled days are unfilled.
-              </Text>
-              <ScrollView
-                horizontal
-                contentContainerStyle={{
-                  flexGrow: 1,
-                  gap: period === "week" ? 6 : 5,
-                  paddingTop: 10,
-                }}
-              >
-                {chartDates.map((date) => {
-                  const result = completion(state, [date], today),
-                    future = date > today;
-                  return (
-                    <View
-                      key={date}
-                      style={{
-                        flex: period === "week" ? 1 : undefined,
-                        width: period === "month" ? 28 : undefined,
-                        minWidth: 24,
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <Text style={[ui.small, { fontSize: 10 }]}>
-                        {future || !result.total ? "–" : `${result.percent}%`}
-                      </Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${date}: ${future ? "Upcoming" : `${result.done}/${result.total} daily tasks done`}`}
-                        onPress={() => setFocus(date)}
-                        style={{
-                          height: 120,
-                          width: "100%",
-                          justifyContent: "flex-end",
-                          borderBottomWidth: 1,
-                          borderTopWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <View
-                          pointerEvents="none"
-                          style={{
-                            position: "absolute",
-                            top: "50%",
-                            width: "100%",
-                            borderTopWidth: 1,
-                            borderColor: colors.border,
-                          }}
-                        />
-                        <View
-                          style={{
-                            height: `${Math.max(result.percent, 3)}%`,
-                            backgroundColor: result.percent
-                              ? focus === date || (!focus && date === today)
-                                ? colors.green
-                                : colors.sageDark
-                              : colors.border,
-                          }}
-                        />
-                      </Pressable>
-                      <Text style={[ui.small, { fontSize: 11 }]}>
-                        {period === "week"
-                          ? DAY_NAMES[parseDate(date).getDay()]
-                          : parseDate(date).getDate()}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-              {!!focus && (
-                <Text style={ui.body}>
-                  {shortDate(focus)} · {completion(state, [focus], today).done}/
-                  {completion(state, [focus], today).total} daily tasks ·{" "}
-                  {completion(state, [focus], today).missed} missed
-                </Text>
-              )}
-            </View>
-          )}
+          <PeriodComparison dates={dates} period={period} />
           {!!plans.length && (
             <View style={ui.card}>
               <Text style={ui.heading}>Weekly targets</Text>

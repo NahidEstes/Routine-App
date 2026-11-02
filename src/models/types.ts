@@ -132,6 +132,8 @@ export interface WeeklyReview {
   updatedAt: string;
 }
 export interface HabitFeatures {
+  challenges?: HabitChallenge[];
+  seenChallengeWins?: string[];
   pauses: HabitPause[];
   organization: { habitId: string; priority: Priority; pinned: boolean }[];
   order: string[];
@@ -142,4 +144,14 @@ export interface HabitFeatures {
   reviews: WeeklyReview[];
   seenAchievements: string[];
   dismissedReviewWeeks: string[];
+}
+export interface HabitChallenge {
+  id: string;
+  name: string;
+  habitId: string;
+  habitName: string;
+  start: DateKey;
+  end: DateKey;
+  target: number;
+  archived?: boolean;
 }

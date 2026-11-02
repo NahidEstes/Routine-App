@@ -12,11 +12,15 @@ import {
   useWindowDimensions,
   type TextInputProps,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import { router } from "expo-router";
 import { DateTimeField } from "./DateTimeField";
+import { tabBarMetrics } from "../presentation/tabBar";
 import { useLocalFeatures } from "../state/LocalFeaturesProvider";
 import { useTheme, classicTheme, premiumTheme, type Palette } from "../theme";
 import {
@@ -90,7 +94,7 @@ export function Button({
   const styles = premium ? premiumStyles : classicStyles;
   const tone = danger ? colors.danger : colors.green;
   const foreground =
-    !secondary && !danger ? "#FFFFFF" : danger ? tone : colors.green;
+    !secondary && !danger ? colors.onAccent : danger ? tone : colors.green;
   const pressedLock = useRef(false);
   const [pending, setPending] = useState(false);
   const inactive = disabled || pending;
@@ -156,6 +160,7 @@ export function IconButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.iconButton,
+        { backgroundColor: colors.sage },
         plain && { backgroundColor: "transparent" },
         { opacity: disabled ? 0.3 : pressed ? 0.6 : 1 },
       ]}
@@ -201,7 +206,7 @@ export function Chip({
         style={{
           fontSize: 13,
           fontWeight: "600",
-          color: selected && !amber ? "white" : colors.green,
+          color: selected && !amber ? colors.onAccent : colors.green,
         }}
       >
         {label}
@@ -225,6 +230,7 @@ export function Segment<T extends string>({
     <View
       style={[
         styles.segment,
+        { backgroundColor: colors.sage, borderColor: colors.border },
         fontScale > 1.3 && width < 450 && { flexDirection: "column" },
       ]}
     >
@@ -245,7 +251,7 @@ export function Segment<T extends string>({
               fontSize: 13,
               fontWeight: "600",
               textAlign: "center",
-              color: option.value === value ? "white" : colors.text,
+              color: option.value === value ? colors.onAccent : colors.text,
             }}
           >
             {option.label}
@@ -261,14 +267,21 @@ export function Screen({
   scrollRef,
   compact = false,
   floatingAction,
+  tab = false,
+  fullWidthAction = false,
 }: React.PropsWithChildren<{
   form?: boolean;
   scrollRef?: React.Ref<ScrollView>;
   compact?: boolean;
   floatingAction?: React.ReactNode;
+  tab?: boolean;
+  fullWidthAction?: boolean;
 }>) {
   const { colors, premium } = useTheme();
   const { timer, timerDockHeight } = useLocalFeatures();
+  const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const tabInset = tab ? tabBarMetrics(fontScale, insets.bottom).reserved : 0;
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () =>
@@ -285,7 +298,9 @@ export function Screen({
   const styles = premium ? premiumStyles : classicStyles;
   return (
     <SafeAreaView
-      edges={["top", "left", "right", "bottom"]}
+      edges={
+        tab ? ["top", "left", "right"] : ["top", "left", "right", "bottom"]
+      }
       style={{ flex: 1, backgroundColor: colors.toolbar }}
     >
       <KeyboardAvoidingView
@@ -300,9 +315,11 @@ export function Screen({
           contentContainerStyle={[
             styles.content,
             compact && { gap: 12, padding: 16 },
-            !!floatingAction && { paddingBottom: 104 },
+            tab && { paddingBottom: tabInset + 24 },
+            !!floatingAction && { paddingBottom: tabInset + 104 },
             timer && {
-              paddingBottom: timerDockHeight + (floatingAction ? 120 : 40),
+              paddingBottom:
+                tabInset + timerDockHeight + (floatingAction ? 120 : 40),
             },
           ]}
         >
@@ -313,12 +330,21 @@ export function Screen({
             pointerEvents="box-none"
             style={{
               position: "absolute",
-              bottom: timer ? timerDockHeight + 28 : 16,
+              bottom: tabInset + (timer ? timerDockHeight + 28 : 16),
               right: 20,
-              maxWidth: "90%",
+              left: fullWidthAction ? 20 : undefined,
+              maxWidth: fullWidthAction ? undefined : "90%",
             }}
           >
-            {floatingAction}
+            {fullWidthAction ? (
+              <View
+                style={{ width: "100%", maxWidth: 640, alignSelf: "center" }}
+              >
+                {floatingAction}
+              </View>
+            ) : (
+              floatingAction
+            )}
           </View>
         )}
       </KeyboardAvoidingView>
@@ -343,7 +369,7 @@ export function Header({
   const { colors, ui, premium } = useTheme();
   const styles = premium ? premiumStyles : classicStyles;
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: colors.toolbar }]}>
       {back ? (
         <View style={ui.between}>
           <IconButton
@@ -428,9 +454,11 @@ export function EmptyState({
 export function ProgressRing({
   percent,
   size = 80,
+  inverted = false,
 }: {
   percent: number;
   size?: number;
+  inverted?: boolean;
 }) {
   const { colors, ui } = useTheme();
   const safePercent = Math.min(100, Math.max(0, percent));
@@ -454,7 +482,7 @@ export function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colors.track}
+            stroke={inverted ? colors.heroTrack : colors.track}
             strokeWidth={8}
             fill="none"
           />
@@ -462,7 +490,7 @@ export function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colors.green}
+            stroke={inverted ? colors.onHero : colors.green}
             strokeWidth={8}
             fill="none"
             strokeDasharray={`${circumference} ${circumference}`}
@@ -471,7 +499,9 @@ export function ProgressRing({
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
         </Svg>
-        <Text style={ui.heading}>{safePercent}%</Text>
+        <Text style={[ui.heading, inverted && { color: colors.onHero }]}>
+          {safePercent}%
+        </Text>
       </View>
     );
   }
@@ -481,11 +511,13 @@ export function DateStrip({
   onChange,
   compact = false,
   hideWeekNavigation = false,
+  filled = false,
 }: {
   value: string;
   onChange: (date: string) => void;
   compact?: boolean;
   hideWeekNavigation?: boolean;
+  filled?: boolean;
 }) {
   const { colors, ui, premium } = useTheme();
   const styles = premium ? premiumStyles : classicStyles;
@@ -539,12 +571,12 @@ export function DateStrip({
             onPress={() => onChange(day)}
             style={[
               styles.date,
-              { minWidth: Math.max(48, 36 * fontScale), paddingVertical: 8 },
+              { minWidth: Math.max(44, 36 * fontScale), paddingVertical: 8 },
               {
                 backgroundColor:
                   day === value
                     ? colors.green
-                    : compact
+                    : compact && !filled
                       ? "transparent"
                       : colors.card,
               },
@@ -553,7 +585,7 @@ export function DateStrip({
             <Text
               style={{
                 fontSize: 12,
-                color: day === value ? "white" : colors.muted,
+                color: day === value ? colors.onAccent : colors.muted,
               }}
             >
               {DAY_NAMES[parseDate(day).getDay()]}
@@ -562,7 +594,7 @@ export function DateStrip({
               style={{
                 fontSize: 20,
                 fontWeight: "600",
-                color: day === value ? "white" : colors.text,
+                color: day === value ? colors.onAccent : colors.text,
               }}
             >
               {parseDate(day).getDate()}

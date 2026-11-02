@@ -83,11 +83,13 @@ export function DaySelector({
   onChange,
   label,
   stripOnly = false,
+  filled = false,
 }: {
   value: string;
   onChange: (date: string) => void;
   label: string;
   stripOnly?: boolean;
+  filled?: boolean;
 }) {
   const { ui } = useTheme();
   const days = weekDates(value);
@@ -113,7 +115,13 @@ export function DaySelector({
           />
         </View>
       )}
-      <DateStrip compact hideWeekNavigation value={value} onChange={onChange} />
+      <DateStrip
+        compact
+        filled={filled}
+        hideWeekNavigation
+        value={value}
+        onChange={onChange}
+      />
     </View>
   );
 }

@@ -10,7 +10,7 @@ export function DateTimeField({
   compact,
   disabled,
 }: PickerProps) {
-  const { colors, ui } = useTheme();
+  const { colors, ui, dark } = useTheme();
   return (
     <View style={{ gap: 8 }}>
       {!compact && <Text style={ui.label}>{label}</Text>}
@@ -23,6 +23,7 @@ export function DateTimeField({
           if (e.target.value) onChange(e.target.value);
         },
         style: {
+          colorScheme: dark ? "dark" : "light",
           minHeight: 48,
           boxSizing: "border-box",
           width: "100%",

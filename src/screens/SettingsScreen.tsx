@@ -1,16 +1,18 @@
 import { BackHandler, Text, View } from "react-native";
 import { useCallback, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
-import { Button, Header, Screen } from "../components/ui";
+import { Button, Header, Screen, Segment } from "../components/ui";
 import { PremiumOffer } from "../components/PremiumOffer";
-import { premiumTheme, ThemeContext, useTheme } from "../theme";
+import { appTheme, ThemeContext, useTheme } from "../theme";
 import { useAppearance } from "../state/AppearanceProvider";
 import { dataFeatureLicenses } from "../content/dataLicenses";
 import { ReminderSettings } from "../components/ReminderSettings";
 import { useLocalFeatures } from "../state/LocalFeaturesProvider";
 
 export default function Settings() {
-  const { colors, ui } = useTheme();
+  const { colors, ui, dark } = useTheme();
+  const { colorMode, setColorMode, colorError, retryColorMode } =
+    useAppearance();
   const { active, used, daysLeft, trial, error, refresh } = useAppearance();
   const { preferenceError, timerError, reload } = useLocalFeatures();
   const [licenses, setLicenses] = useState(false);
@@ -30,7 +32,7 @@ export default function Settings() {
   );
   if (premiumOpen)
     return (
-      <ThemeContext.Provider value={premiumTheme}>
+      <ThemeContext.Provider value={appTheme(true, dark)}>
         <PremiumOffer onClose={() => setPremiumOpen(false)} />
       </ThemeContext.Provider>
     );
@@ -40,6 +42,12 @@ export default function Settings() {
       <View style={ui.card}>
         <Text style={ui.heading}>App preferences</Text>
         <Text style={ui.body}>Language · English</Text>
+        <Button
+          label="Home-screen widget"
+          icon="grid-outline"
+          secondary
+          onPress={() => router.push("/home-widget")}
+        />
         <Button
           label="Vacation / Pause mode"
           secondary
@@ -96,6 +104,32 @@ export default function Settings() {
       )}
       <View style={ui.card}>
         <Text style={ui.heading}>Appearance</Text>
+        <Text style={ui.label}>Color theme</Text>
+        <Segment
+          value={colorMode}
+          onChange={(mode) => void setColorMode(mode)}
+          options={[
+            { value: "system", label: "System" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+          ]}
+        />
+        <Text style={ui.small}>
+          System follows your device. Your choice is saved on this device and
+          works with either design.
+        </Text>
+        {!!colorError && (
+          <>
+            <Text accessibilityRole="alert" style={ui.error}>
+              {colorError}
+            </Text>
+            <Button
+              secondary
+              label="Retry color theme"
+              onPress={retryColorMode}
+            />
+          </>
+        )}
         <Text style={ui.body}>
           {active ? "Premium design · Active" : "Classic design · Default"}
         </Text>
@@ -106,7 +140,7 @@ export default function Settings() {
               ? "Classic is active while your appearance settings are unavailable. Retry loading below."
               : used
                 ? "Your free trial has ended. Classic design is active; all your habits and progress are still here."
-                : "A simple layout with lists, checkboxes and familiar controls."}
+                : "Soft Sage colors, rounded cards and clear layouts for your daily routine."}
         </Text>
         <Button
           label="Upgrade Premium"

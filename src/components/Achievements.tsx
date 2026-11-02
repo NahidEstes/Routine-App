@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { achievements } from "../domain/achievements";
 import {
   achievementHint,
+  achievementUnit,
   badgeAppearance,
   nextAchievement,
   type Achievement,
@@ -13,17 +14,21 @@ import { useTracker } from "../state/TrackerProvider";
 import { useTheme } from "../theme";
 import { Button, Chip, Icon } from "./ui";
 import { Sheet } from "./Sheet";
+import { shortDate } from "../utils/dates";
+import { FeatureIcon } from "./TabCards";
 
 export function BadgeMedallion({
   badge,
   small = false,
+  size,
 }: {
   badge: Pick<Achievement, "id" | "earned">;
   small?: boolean;
+  size?: number;
 }) {
   const { colors } = useTheme();
   const appearance = badgeAppearance[badge.id];
-  const diameter = small ? 48 : 72;
+  const diameter = size ?? (small ? 48 : 72);
   const tone = appearance.tone === "amber" ? colors.amber : colors.green;
   return (
     <View
@@ -46,7 +51,7 @@ export function BadgeMedallion({
     >
       <Icon
         name={appearance.icon}
-        size={small ? 24 : 34}
+        size={small ? diameter * 0.5 : 34}
         color={badge.earned ? tone : colors.muted}
       />
       {badge.earned && (
@@ -96,7 +101,7 @@ function BadgeProgress({ badge }: { badge: Achievement }) {
       <Text style={ui.small}>
         {badge.metric === "streak" ? "Best streak · " : ""}
         {Math.min(badge.current, badge.target)} / {badge.target}{" "}
-        {badge.metric === "streak" ? "scheduled days" : "completions"}
+        {achievementUnit(badge)}
       </Text>
     </View>
   );
@@ -104,9 +109,11 @@ function BadgeProgress({ badge }: { badge: Achievement }) {
 export function NextAchievementCard({
   badges,
   onSelect,
+  compact = false,
 }: {
   badges: Achievement[];
   onSelect?: (id: AchievementId) => void;
+  compact?: boolean;
 }) {
   const { colors, ui } = useTheme();
   const next = nextAchievement(badges);
@@ -138,28 +145,80 @@ export function NextAchievementCard({
               params: { badge: next.id },
             })
       }
-      style={[ui.sageCard, { minHeight: 48 }]}
+      style={[compact ? ui.card : ui.sageCard, { minHeight: 48 }]}
     >
-      <View style={ui.between}>
-        <Text style={[ui.label, ui.grow, { color: colors.green }]}>
-          Your next small win
-        </Text>
-        <Icon name="chevron-forward" size={20} />
-      </View>
-      <View style={ui.row}>
-        <BadgeMedallion small badge={next} />
-        <View style={ui.grow}>
-          <Text style={ui.heading}>{next.name}</Text>
-          <Text style={ui.small}>{achievementHint(next)}</Text>
+      {compact ? (
+        <View style={[ui.row, { alignItems: "flex-start" }]}>
+          <FeatureIcon name="ribbon-outline" amber />
+          <View style={[ui.grow, { gap: 8 }]}>
+            <Text
+              style={[ui.small, { color: colors.amber, fontWeight: "600" }]}
+            >
+              Next achievement
+            </Text>
+            <Text style={ui.heading}>{next.name}</Text>
+            <BadgeProgress badge={next} />
+          </View>
         </View>
-      </View>
-      <BadgeProgress badge={next} />
+      ) : (
+        <>
+          <View style={ui.between}>
+            <Text style={[ui.label, ui.grow, { color: colors.green }]}>
+              Your next small win
+            </Text>
+            <Icon name="chevron-forward" size={20} />
+          </View>
+          <View style={ui.row}>
+            <BadgeMedallion small badge={next} />
+            <View style={ui.grow}>
+              <Text style={ui.heading}>{next.name}</Text>
+              <Text style={ui.small}>{achievementHint(next)}</Text>
+            </View>
+          </View>
+          <BadgeProgress badge={next} />
+        </>
+      )}
     </Pressable>
   );
 }
-export function BadgePreview({ badges }: { badges: Achievement[] }) {
+export function BadgePreview({
+  badges,
+  compact = false,
+}: {
+  badges: Achievement[];
+  compact?: boolean;
+}) {
   const { colors, ui } = useTheme();
   const earned = badges.filter((b) => b.earned);
+  if (compact)
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`View all achievements, ${earned.length} earned`}
+        onPress={() => router.push("/achievements")}
+        style={({ pressed }) => [
+          ui.card,
+          ui.row,
+          { flexWrap: "wrap", opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <FeatureIcon name="star-outline" />
+        <View style={{ flexGrow: 1, minWidth: 80, gap: 4 }}>
+          <Text style={ui.label}>Your badges</Text>
+          <Text style={ui.small}>
+            {earned.length
+              ? `${earned.length} earned`
+              : "Your first small win awaits"}
+          </Text>
+        </View>
+        <View style={[ui.row, { gap: 6 }]}>
+          {earned.slice(0, 3).map((badge) => (
+            <BadgeMedallion key={badge.id} small size={36} badge={badge} />
+          ))}
+        </View>
+        <Icon name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
+    );
   return (
     <View style={{ gap: 12 }}>
       <View style={ui.between}>
@@ -276,7 +335,7 @@ export function Achievements({
           <Pressable
             key={b.id}
             accessibilityRole="button"
-            accessibilityLabel={`${b.name}. ${b.earned ? "Earned" : "Upcoming"}. ${Math.min(b.current, b.target)} of ${b.target} ${b.metric === "streak" ? "scheduled days, best streak" : "completions"}`}
+            accessibilityLabel={`${b.name}. ${b.earned ? "Earned" : "Upcoming"}. ${Math.min(b.current, b.target)} of ${b.target} ${achievementUnit(b)}${b.metric === "streak" ? ", best streak" : ""}`}
             onPress={() => setSelected(b.id)}
             style={{
               width: width < 370 || fontScale > 1.25 ? "100%" : "48%",
@@ -326,7 +385,8 @@ export function Achievements({
       <Text style={ui.small}>
         Badges follow your saved history. Busy goal completions count, and
         correcting a record updates eligibility. Off-days and pauses are neutral
-        in streaks.
+        in streaks. A break does not erase past achievements. One small step is
+        enough to return.
       </Text>
       {detail && (
         <Sheet title="Your achievement" onClose={() => setSelected(undefined)}>
@@ -340,6 +400,79 @@ export function Achievements({
           <Text style={ui.body}>{detail.description}</Text>
           <BadgeProgress badge={detail} />
           <Text style={ui.body}>{achievementHint(detail)}</Text>
+          {!!detail.earnedOn && (
+            <Text style={[ui.label, { color: colors.green }]}>
+              Earned on {shortDate(detail.earnedOn)} ·{" "}
+              {detail.earnedOn.slice(0, 4)}
+            </Text>
+          )}
+          <Text style={ui.heading}>
+            {detail.earned
+              ? "The effort behind this badge"
+              : "Your progress so far"}
+          </Text>
+          {!detail.evidence.length && (
+            <Text style={ui.small}>
+              Eligible saved completions will appear here. No action is needed
+              to claim a badge.
+            </Text>
+          )}
+          {detail.evidence
+            .slice(-5)
+            .reverse()
+            .map((e, i) => (
+              <View
+                key={`${e.date}:${e.entryId ?? e.challengeId}:${i}`}
+                style={ui.sageCard}
+              >
+                <Text style={ui.label}>
+                  {e.title} · {shortDate(e.date)}
+                </Text>
+                <Text style={ui.small}>{e.detail}</Text>
+                {e.entryId && e.habitId && (
+                  <Button
+                    secondary
+                    compact
+                    label="View habit record"
+                    onPress={() => {
+                      setSelected(undefined);
+                      router.push({
+                        pathname: "/habit-details",
+                        params: {
+                          id: e.habitId,
+                          entryId: e.entryId,
+                          date: e.date,
+                        },
+                      });
+                    }}
+                  />
+                )}
+                {e.challengeId && (
+                  <Button
+                    secondary
+                    compact
+                    label="View challenge"
+                    onPress={() => {
+                      setSelected(undefined);
+                      router.push({
+                        pathname: "/challenges",
+                        params: { challenge: e.challengeId },
+                      });
+                    }}
+                  />
+                )}
+              </View>
+            ))}
+          {!!detail.evidence.length && (
+            <Text style={ui.small}>
+              Based on retained local-day records
+              {detail.evidence.length > 5
+                ? "; showing the latest 5 contributing records"
+                : ""}
+              . Dates describe the saved activity day, not an exact completion
+              time.
+            </Text>
+          )}
           {detail.metric === "streak" && (
             <Text style={ui.small}>
               This is your best recorded streak for one daily habit. A new

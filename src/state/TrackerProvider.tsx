@@ -21,13 +21,14 @@ import { applyAction, type Action } from "../domain/actions";
 import { localToday } from "../utils/dates";
 import { openRepository } from "../storage/open";
 import type { TrackerRepository } from "../storage/repository";
-import { WriteQueue } from "../storage/writeQueue";
+import { trackerChannel } from "../storage/trackerChannel";
 import { useTheme } from "../theme";
 import { createBackup, prepareRestore, type Backup } from "../domain/backup";
 import { createId } from "../utils/id";
 import {
   baselineAchievements,
   earnedAchievementIds,
+  completedChallengeIds,
 } from "../domain/achievements";
 
 type ContextValue = {
@@ -56,7 +57,7 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
   const dismissAchievements = useCallback(() => setAchievementNotice([]), []);
   const current = useRef(state);
   const repo = useRef<TrackerRepository | null>(null);
-  const queue = useRef(new WriteQueue());
+  const queue = useRef(trackerChannel.queue);
   const [feedback, setFeedback] = useState<{
     message: string;
     undo?: Action;
@@ -68,32 +69,52 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
   const [today, setToday] = useState(localToday),
     [selectedDate, setSelectedDate] = useState(localToday);
   const load = useCallback(async () => {
-    try {
-      const storage = await openRepository();
-      const stored = await storage.load();
-      const next = baselineAchievements(
-        materialize(stored, localToday()),
-        localToday(),
-      );
-      if (JSON.stringify(next) !== JSON.stringify(stored))
-        await storage.save(next);
-      repo.current = storage;
-      current.current = next;
-      setState(next);
-      setReady(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open local data.");
-    } finally {
-      setLoading(false);
-    }
+    return trackerChannel.queue.enqueue(
+      "tracker-initialize",
+      async () => {
+        try {
+          const storage = await openRepository();
+          const stored = await storage.load();
+          const next = baselineAchievements(
+            materialize(stored, localToday()),
+            localToday(),
+          );
+          if (JSON.stringify(next) !== JSON.stringify(stored))
+            await storage.save(next);
+          repo.current = storage;
+          current.current = next;
+          setState(next);
+          setReady(true);
+          trackerChannel.publish(next);
+          return true;
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "Could not open local data.",
+          );
+          return false;
+        } finally {
+          setLoading(false);
+        }
+      },
+      () => {},
+    );
   }, []);
   useEffect(() => {
+    const unsubscribe = trackerChannel.subscribe((next) => {
+      current.current = next;
+      setState(next);
+    });
+    const unsubscribeBusy = trackerChannel.subscribeBusy(setSaving);
     void Promise.resolve().then(load);
     if (__DEV__ && process.env.EXPO_PUBLIC_STORAGE_CHECK === "1") {
       void import("../validation/nativeStorageCheck")
         .then(({ nativeStorageCheck }) => nativeStorageCheck())
         .catch((e) => console.error("STEADY_SQLITE_CHECK_FAIL", e));
     }
+    return () => {
+      unsubscribe();
+      unsubscribeBusy();
+    };
   }, [load]);
   const dispatch = useCallback((action: Action) => {
     const run = async () => {
@@ -120,21 +141,33 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
               )
             : applyAction(current.current, action, localToday());
         const earned = earnedAchievementIds(next, localToday());
+        const challengeWins = completedChallengeIds(next, localToday());
+        const newChallengeWins = challengeWins
+          .filter(
+            (id) =>
+              !(current.current.features.seenChallengeWins ?? []).includes(id),
+          )
+          .map((id) => `challenge:${id}`);
         const newAchievements = earned.filter(
           (id) => !current.current.features.seenAchievements.includes(id),
         );
         // Persist acknowledgement with progress; reopening cannot repeat celebrations.
         next = baselineAchievements(next, localToday());
         if (action.type !== "timerAmount") await repo.current.save(next);
-        const earnedSet = new Set<string>(earned);
+        const earnedSet = new Set<string>([
+          ...earned,
+          ...challengeWins.map((id) => `challenge:${id}`),
+        ]);
         setAchievementNotice((previous) => [
           ...new Set([
             ...previous.filter((id) => earnedSet.has(id)),
             ...newAchievements,
+            ...newChallengeWins,
           ]),
         ]);
         current.current = next;
         setState(next);
+        trackerChannel.publish(next);
         setError("");
         setFeedback(
           previous && action.type === "timerAmount"
@@ -185,6 +218,7 @@ export function TrackerProvider({ children }: React.PropsWithChildren) {
             });
             current.current = next;
             setState(next);
+            trackerChannel.publish(next);
             setToday(now);
             setSelectedDate(now);
             setFeedback(null);

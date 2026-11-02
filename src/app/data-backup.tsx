@@ -101,7 +101,12 @@ export default function DataBackup() {
         <Text style={ui.body}>
           Save habits, routines, daily notes and history, including schedule
           revisions, reschedules, weekly commitments, sessions and busy-day
-          settings, pause periods, habit organization and weekly reviews.
+          settings, pause periods, habit organization, weekly reviews and
+          personal challenges.
+        </Text>
+        <Text style={ui.small}>
+          Profile, color theme, reminder preferences and any running timer stay
+          on this device; they are not included in this backup.
         </Text>
         <Text style={ui.small}>
           Choose or create a folder in the Android system picker. The JSON file
@@ -121,8 +126,8 @@ export default function DataBackup() {
           replacing the data on this device.
         </Text>
         <Text style={ui.small}>
-          Replace only · No merge · Reads formats 1 and 2 · Exports format 2 ·
-          Maximum 20 MB
+          Replace only · No merge · Reads formats 1, 2 and 3 · Exports format 3
+          · Maximum 20 MB
         </Text>
         <Button
           label={preview ? "Choose a different backup" : "Choose backup file"}

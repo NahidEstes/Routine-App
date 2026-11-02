@@ -86,6 +86,7 @@ export function DateTimeField({
           <Icon
             name={mode === "date" ? "calendar-outline" : "time-outline"}
             size={22}
+            color={colors.green}
           />
         )}
         <Text style={[compact ? ui.subtitle : ui.body, ui.grow]}>

@@ -4,5 +4,5 @@
     "strict": true,
     "types": ["react", "react-native", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
 }

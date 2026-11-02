@@ -23,7 +23,8 @@ import {
 } from "../presentation/habits";
 import { createId } from "../utils/id";
 import { DAY_NAMES } from "../utils/dates";
-import { habitFromTemplate, habitTemplates } from "../domain/habitTemplates";
+import { habitFromTemplate } from "../domain/habitTemplates";
+import { HabitQuickStart } from "../components/HabitQuickStart";
 import { useTheme } from "../theme";
 
 const icons: { name: HabitIcon; label: string }[] = [
@@ -62,6 +63,9 @@ function HabitForm() {
       : undefined,
   );
   const initial = existing ?? starter;
+  const [selectedTemplate, setSelectedTemplate] = useState<string | undefined>(
+    starter ? params.template : undefined,
+  );
   const [draftId] = useState(() => initial?.id ?? createId("habit"));
   const [draft, setDraft] = useState<HabitDraft>(() => ({
     name: initial?.name ?? "",
@@ -113,6 +117,29 @@ function HabitForm() {
       });
       pendingFocus.current = null;
     }
+  };
+  const selectTemplate = (templateId: string) => {
+    if (saving) return;
+    const h = habitFromTemplate(templateId, draft.startDate);
+    if (!h) return;
+    setDraft((d) => ({
+      ...d,
+      name: h.name,
+      goalType: h.goal.type,
+      amount: String(h.goal.value),
+      unit: h.goal.type === "count" ? h.goal.unit : "times",
+      schedule: h.time ? "time" : "anytime",
+      time: h.time ?? "09:00",
+      repeat: h.repeat.type,
+      days: h.repeat.days,
+      weeklyGoal: h.repeat.type === "weekly" ? String(h.repeat.target) : "3",
+      busyEnabled: h.busyGoal !== null,
+      busyAmount: String(h.busyGoal ?? 1),
+    }));
+    setSelectedTemplate(templateId);
+    setIcon(h.icon);
+    setCategory(h.category);
+    setErrors({});
   };
   const error = (key: FormKey) =>
     errors[key] ? (
@@ -226,41 +253,11 @@ function HabitForm() {
         title={existing ? "Edit habit" : "New habit"}
       />
       {!existing && (
-        <View style={ui.sageCard}>
-          <Text style={ui.heading}>Start with a template</Text>
-          <Text style={ui.small}>
-            Choose an idea, then adjust the details below. Nothing is saved
-            until you tap Create habit.
-          </Text>
-          <View style={[ui.row, { flexWrap: "wrap" }]}>
-            {habitTemplates.map((template) => (
-              <Chip
-                key={template.id}
-                label={template.name}
-                onPress={() => {
-                  const h = habitFromTemplate(template.id, today)!;
-                  setDraft((d) => ({
-                    ...d,
-                    name: h.name,
-                    goalType: h.goal.type,
-                    amount: String(h.goal.value),
-                    unit: h.goal.type === "count" ? h.goal.unit : "times",
-                    schedule: "time",
-                    time: h.time!,
-                    repeat: "daily",
-                    days: [0, 1, 2, 3, 4, 5, 6],
-                    weeklyGoal: "3",
-                    busyEnabled: h.busyGoal !== null,
-                    busyAmount: String(h.busyGoal ?? 1),
-                  }));
-                  setIcon(h.icon);
-                  setCategory(h.category);
-                  setErrors({});
-                }}
-              />
-            ))}
-          </View>
-        </View>
+        <HabitQuickStart
+          selectedId={selectedTemplate}
+          onSelect={selectTemplate}
+          disabled={saving}
+        />
       )}
       <View
         onLayout={(event) => recordPosition("name", event.nativeEvent.layout.y)}

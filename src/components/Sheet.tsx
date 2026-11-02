@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, Ref } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -16,7 +16,14 @@ export function Sheet({
   title,
   onClose,
   children,
-}: PropsWithChildren<{ title: string; onClose: () => void }>) {
+  scrollRef,
+  rounded = false,
+}: PropsWithChildren<{
+  title: string;
+  onClose: () => void;
+  scrollRef?: Ref<ScrollView>;
+  rounded?: boolean;
+}>) {
   const { colors, ui, premium } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -39,8 +46,8 @@ export function Sheet({
           accessibilityViewIsModal
           style={{
             maxHeight: "90%",
-            borderTopLeftRadius: premium ? 24 : 0,
-            borderTopRightRadius: premium ? 24 : 0,
+            borderTopLeftRadius: premium || rounded ? 24 : 0,
+            borderTopRightRadius: premium || rounded ? 24 : 0,
             backgroundColor: colors.background,
             borderTopWidth: 1,
             borderColor: colors.border,
@@ -61,6 +68,7 @@ export function Sheet({
             }}
           />
           <ScrollView
+            ref={scrollRef}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ padding: 20, gap: 16 }}
           >

@@ -1,5 +1,7 @@
 # Third-party notices for local data and reminder features
 
+react-native-android-widget 0.24.0 uses the MIT terms below. Copyright (c) 2022 Stefan Aleksovski. Its copyright and MIT permission notice are included in Settings → Open-source licenses.
+
 expo-notifications 57.0.23 is licensed under the Expo MIT notice reproduced below.
 
 @react-native-community/datetimepicker 9.1.0 uses the MIT terms below. Copyright (c) 2019 React Native Community.

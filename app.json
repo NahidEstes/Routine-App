@@ -3,10 +3,10 @@
     "name": "Routine App",
     "slug": "steady-routine",
     "scheme": "steady-routine",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#F8F6F0",
     "platforms": [
       "android",
@@ -22,14 +22,37 @@
         {
           "backgroundColor": "#F8F6F0",
           "image": "./assets/icon.png",
-          "imageWidth": 180
+          "imageWidth": 180,
+          "dark": {
+            "backgroundColor": "#101A16",
+            "image": "./assets/icon.png"
+          }
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "RoutineToday",
+              "label": "Routine App · Today",
+              "description": "Today's progress and quick habit actions",
+              "minWidth": "250dp",
+              "minHeight": "220dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 3,
+              "resizeMode": "horizontal|vertical",
+              "widgetCategory": "home_screen",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "android": {
       "package": "com.nahid.steadyroutine",
-      "versionCode": 2,
+      "versionCode": 3,
       "allowBackup": false,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
@@ -51,9 +74,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5b211251-952e-4dc3-bf4b-3be6749a7587"
+        "projectId": "1f48f8d4-28b3-4424-ad70-f226abb8ee70"
       }
     },
-    "owner": "nahidestes"
+    "owner": "nahidmohammed213"
   }
 }

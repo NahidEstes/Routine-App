@@ -5,6 +5,7 @@ import { migrate } from "./migrations";
 import { validateBackup } from "../domain/backup";
 import { applyAction, type Action } from "../domain/actions";
 import { baselineAchievements } from "../domain/achievements";
+import { defaultFeatures } from "../domain/organization";
 
 const tables = {
   habits: "habits",
@@ -38,7 +39,7 @@ export class TrackerRepository {
     const features = await this.db.getAllAsync<{ payload: string }>(
       "SELECT payload FROM settings WHERE id = 'habitFeatures'",
     );
-    if (features.length) state.features = JSON.parse(features[0].payload);
+    if (features.length) state.features = { ...defaultFeatures(), ...JSON.parse(features[0].payload) };
     return state;
   }
   async hasTimerReceipt(id: string) {

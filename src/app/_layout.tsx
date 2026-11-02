@@ -9,6 +9,7 @@ import { ReminderProvider } from "../state/ReminderProvider";
 import { FocusTimerDock } from "../components/FocusTimerDock";
 import { View } from "react-native";
 import { AchievementCelebration } from "../components/AchievementCelebration";
+import { WidgetSync } from "../widgets/WidgetSync";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
@@ -19,13 +20,14 @@ export default function RootLayout() {
   );
 }
 function AppLayout() {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   return (
     <TrackerProvider>
       <LocalFeaturesProvider>
         <ReminderProvider>
           <View style={{ flex: 1 }}>
-            <StatusBar style="dark" />
+            <WidgetSync />
+            <StatusBar style={dark ? "light" : "dark"} />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -35,6 +37,8 @@ function AppLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="settings" />
               <Stack.Screen name="achievements" />
+              <Stack.Screen name="challenges" />
+              <Stack.Screen name="home-widget" />
               <Stack.Screen name="habit" />
               <Stack.Screen name="habit-details" />
               <Stack.Screen name="habits" />

@@ -217,7 +217,7 @@ test("next badge uses existing eligibility and describes a best streak without p
   assert.equal(nextAchievement(badges)?.id, "first");
   const progress = badges.map((b) => ({
     ...b,
-    current: b.metric === "streak" ? 6 : 1,
+    current: b.metric === "streak" ? 6 : b.metric === "completions" ? 1 : 0,
     earned: b.id === "first",
   }));
   const next = nextAchievement(progress)!;
